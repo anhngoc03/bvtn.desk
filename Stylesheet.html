@@ -752,6 +752,44 @@
 
 
 
+  /* ===== BAO CAO 2 - 2 khoi accordion doc lap (Bao cao cong tac phe duyet) =====
+     Tai su dung dung ky thuat .accordion-panel o tren cho phan noi dung mo/dong; rieng phan
+     "tieu de khoi" o day la 1 nut bam toan chieu rong, luon hien, kem mui ten xoay huong theo
+     trang thai dong/mo (::after, transform rotate) de bao hieu ro rang cho nguoi dung. */
+  .report2-block {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .report2-block-header {
+    width: 100%;
+    text-align: left;
+    padding: 14px 18px;
+    background: var(--color-bg-tint2);
+    border: none;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--color-primary);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s ease;
+  }
+  .report2-block-header::after {
+    content: "▾";
+    font-size: 13px;
+    transition: transform 0.28s ease;
+  }
+  .report2-block-header.active::after { transform: rotate(180deg); }
+  .report2-block-header:hover { background: var(--color-border); }
+  .report2-block .accordion-panel-inner { padding: 0 18px; }
+  .report2-block .accordion-panel.open .accordion-panel-inner { padding: 18px; }
+
+
+
+
 
 
 
