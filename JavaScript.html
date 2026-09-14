@@ -1,0 +1,4925 @@
+<script>
+  // ==========================================================
+  // STATE
+  // ==========================================================
+  let session = null; // { token, email, hoTen, vaiTro, khoaPhong }
+  let khoaListCache = null;         // cache khoa/phong cho man hinh Cap nhat tien do
+  let deAnCacheByKhoa = {};         // cache de an theo khoa cho man hinh Cap nhat tien do
+  let searchKhoaListCache = null;   // cache khoa/phong cho man hinh Tra cuu (Admin/TVHĐ: tat ca)
+  let searchDeAnCacheByKhoa = {};   // cache de an theo khoa cho man hinh Tra cuu
+  let currentHistoryData = []; // luu du lieu lich su lan render gan nhat, de dung khi Sua
+  let modalConfirmCallback = null;
+  let selectedFiles = [];        // file dang duoc chon o man hinh Cap nhat tien do (form chinh)
+  let modalKeepFileUrls = [];    // file CU (da co san tren Drive) dang duoc GIU LAI trong modal Sua
+  let modalNewFiles = [];        // file MOI dang duoc chon them trong modal Sua
+  let modalFileNameByUrl = {};   // cache ten file THAT (lay tu Drive) de hien thi trong modal Sua, key = url
+  let progressChiSoList = [];    // danh sach ten chi so do luong cua de an dang chon (chi ap dung ma "ĐA")
+  let lastReportStats = null;
+  let currentReportTab = null;
+  let chiSoModalList = [];       // danh sach chi so dang hien trong popup "Xem chi tiết" (co rowNumber de sua)
+  let chiSoModalEditing = false;
+  let dangkyFieldDefs = null;    // schema cac cau hoi cua tung loai dang ky (lay tu server 1 lan, cache lai)
+  let dangkyStatus = null;       // trang thai bat/tat cua 3 loai dang ky
+  let dangkyKhoaOptionsCache = null; // danh sach khoa/phong goc (Sheet DS_khoa) cho dropdown "Khoa/phòng đăng ký"
+  let dangkySelectedLoai = "";   // loai dang ky dang duoc chon o muc 4 tren form nop moi
+  let dangkyHistoryData = [];    // danh sach phieu da nop (theo quyen xem cua tai khoan)
+  let dangkyHistorySelectedId = null;
+  let dangkyHistoryEditing = false;
+  let dangkySelectedFiles = [];  // file dang chon o form nop moi (cau "Dinh kem file")
+  let dangkyEditKeepFileUrls = []; // file CU (da co san tren Drive) dang duoc GIU LAI khi Sua 1 phieu
+  let dangkyEditNewFiles = [];     // file MOI dang duoc chon them khi Sua 1 phieu
+  let dangkyEditFileNameByUrl = {};
+
+
+
+
+  const TOKEN_KEY = "app_session_token";
+  const PAGE_KEY = "app_current_page";
+
+
+
+
+  // ==========================================================
+  // DINH NGHIA MENU + PHAN QUYEN THEO VAI TRO
+  // roles rong ([]) nghia la TAT CA vai tro deu duoc truy cap
+  // ==========================================================
+  const MENU_ITEMS = [
+    { key: "dangky", icon: "📨", title: "Đăng ký", desc: "Đăng ký đề án, sáng kiến cải tiến chất lượng.", roles: [], group: "Quản lý đề án" },
+    { key: "phancong", icon: "👥", title: "Phân công phê duyệt", desc: "Phân công thành viên hội đồng chấm đề án, sáng kiến (dành cho Admin).", roles: ["Admin"], group: "Phê duyệt" },
+    { key: "pheduyet", icon: "📝", title: "Phê duyệt", desc: "Phê duyệt đề án, sáng kiến cải tiến chất lượng (dành cho Thành viên Hội đồng).", roles: ["Admin", "TVHĐ"], group: "Phê duyệt" },
+    { key: "noplan2", icon: "📮", title: "Gửi lại sau phê duyệt", desc: "Nộp lại đề án/sáng kiến sau khi có kết quả phê duyệt lần 1.", roles: [], group: "Quản lý đề án" },
+    { key: "filechot", icon: "📄", title: "Gửi bản hoàn chỉnh", desc: "Nộp bản hoàn chỉnh (có chữ ký) của đề án/sáng kiến.", roles: [], group: "Quản lý đề án" },
+    { key: "search", icon: "🔎", title: "Tra cứu thông tin đề án, sáng kiến", desc: "Tra cứu thông tin và trạng thái các đề án, sáng kiến.", roles: [], group: "Quản lý đề án" },
+    { key: "progress", icon: "⏳", title: "Cập nhật tiến độ thực hiện", desc: "Cập nhật tình hình thực hiện đề án, sáng kiến theo thời gian.", roles: [], group: "Quản lý đề án" },
+    { key: "bcnghiemthu", icon: "🧾", title: "Báo cáo nghiệm thu", desc: "Nộp báo cáo nghiệm thu cho đề án/sáng kiến đã được duyệt.", roles: [], group: "Nghiệm thu" },
+    { key: "nghiemthu", icon: "📋", title: "Nghiệm thu", desc: "Đánh giá hiệu quả đề án, sáng kiến cải tiến (dành cho Thành viên Hội đồng).", roles: ["Admin", "TVHĐ"], group: "Nghiệm thu" },
+    { key: "report", icon: "📊", title: "Báo cáo", desc: "Tổng hợp và thống kê.", roles: ["Admin", "TVHĐ"], group: "Báo cáo" }
+  ];
+
+  // Thu tu hien thi cac nhom tren Sidebar
+  const MENU_GROUP_ORDER = ["Quản lý đề án", "Phê duyệt", "Nghiệm thu", "Báo cáo"];
+  // GIAI DOAN 2: App Shell ap dung cho TAT CA man hinh, tru "login".
+  function isShellScreen_(name) { return name !== "login"; }
+
+
+
+
+  // Cac man hinh co header/user-info can dien Ho ten + Email
+  const SCREENS_WITH_USER_INFO = ["menu", "dangky", "pheduyet", "search", "progress", "nghiemthu", "report", "phancong", "noplan2", "filechot", "bcnghiemthu", "shell"];
+
+
+
+
+  function roleAllowed(item) {
+    if (!session) return false;
+    if (!item.roles || item.roles.length === 0) return true;
+    return item.roles.indexOf(String(session.vaiTro).trim()) !== -1;
+  }
+
+
+
+
+  // ==========================================================
+  // KHOI DONG
+  // ==========================================================
+  window.addEventListener("load", init);
+
+
+
+
+  function init() {
+    injectChangePasswordButtons();
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      showScreen("login");
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(function (user) {
+        if (!user || !user.success) {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(PAGE_KEY);
+          showScreen("login");
+          return;
+        }
+        session = user;
+        fillUserInfoEverywhere();
+        renderSidebar();
+        const lastPage = localStorage.getItem(PAGE_KEY) || "menu";
+        showScreen(lastPage);
+      })
+      .withFailureHandler(function () {
+        localStorage.removeItem(TOKEN_KEY);
+        showScreen("login");
+      })
+      .getCurrentUser(token);
+  }
+
+
+  // Tu dong gan them nut "Doi mat khau" ngay canh MOI nut "Dang xuat" tren tat ca man hinh
+  function injectChangePasswordButtons() {
+    document.querySelectorAll(".logout-btn").forEach(function (btn) {
+      if (btn.dataset.cpInjected) return;
+      const cpBtn = document.createElement("button");
+      cpBtn.type = "button";
+      cpBtn.className = "logout-btn";
+      cpBtn.innerText = "Đổi mật khẩu";
+      cpBtn.onclick = openChangePasswordModal;
+      btn.parentNode.insertBefore(cpBtn, btn);
+      btn.dataset.cpInjected = "1";
+    });
+  }
+
+
+
+
+  function fillUserInfoEverywhere() {
+    SCREENS_WITH_USER_INFO.forEach(function (p) {
+      const nameEl = document.getElementById(p + "UserName");
+      const emailEl = document.getElementById(p + "UserEmail");
+      if (nameEl) nameEl.innerText = session.hoTen;
+      if (emailEl) emailEl.innerText = session.email;
+    });
+    const welcome = document.getElementById("welcomeName");
+    if (welcome) welcome.innerText = session.hoTen;
+  }
+
+
+
+
+  // ==========================================================
+  // MENU: render dong theo vai tro (khong con duoc goi tu Giai doan 1, giu lai cho an toan)
+  // ==========================================================
+  function renderMenuCards() {
+    const box = document.getElementById("menuContainer");
+    if (!box) return;
+    box.innerHTML = "";
+    MENU_ITEMS.forEach(function (item) {
+      if (!roleAllowed(item)) return;
+      const card = document.createElement("div");
+      card.className = "menu-card";
+      card.onclick = function () { showScreen(item.key); };
+      card.innerHTML =
+        '<div class="menu-icon">' + item.icon + '</div>' +
+        '<h3>' + escapeHtml(item.title) + '</h3>' +
+        '<p>' + escapeHtml(item.desc) + '</p>';
+      box.appendChild(card);
+    });
+  }
+
+  // ==========================================================
+  // APP SHELL - SIDEBAR
+  // ==========================================================
+  function renderSidebar() {
+    const nav = document.getElementById("sidebarNav");
+    if (!nav) return;
+    nav.innerHTML = "";
+
+    MENU_GROUP_ORDER.forEach(function (groupName) {
+      const itemsInGroup = MENU_ITEMS.filter(function (item) { return item.group === groupName && roleAllowed(item); });
+      if (itemsInGroup.length === 0) return;
+
+      const title = document.createElement("div");
+      title.className = "sidebar-group-title";
+      title.innerText = groupName;
+      nav.appendChild(title);
+
+      itemsInGroup.forEach(function (item) {
+        const a = document.createElement("a");
+        a.className = "sidebar-item";
+        a.dataset.key = item.key;
+        a.innerText = item.title;
+        a.onclick = function () { showScreen(item.key); closeSidebarDrawer(); };
+        nav.appendChild(a);
+      });
+    });
+
+    updateSidebarActiveState(localStorage.getItem(PAGE_KEY) || "menu");
+  }
+
+  function updateSidebarActiveState(name) {
+    document.querySelectorAll("#sidebarNav .sidebar-item").forEach(function (el) {
+      el.classList.toggle("active", el.dataset.key === name);
+    });
+  }
+
+  function updateTopbarTitle(name) {
+    const el = document.getElementById("topbarTitle");
+    if (!el) return;
+    if (name === "menu") { el.innerText = "Trang chủ"; return; }
+    const item = MENU_ITEMS.find(function (m) { return m.key === name; });
+    el.innerText = item ? item.title : "";
+  }
+
+  function toggleSidebarDrawer() {
+    document.getElementById("appSidebar").classList.toggle("open");
+    document.body.classList.toggle("sidebar-drawer-open");
+  }
+
+  function closeSidebarDrawer() {
+    document.getElementById("appSidebar").classList.remove("open");
+    document.body.classList.remove("sidebar-drawer-open");
+  }
+
+
+
+
+  // ==========================================================
+  // DANG NHAP / DANG XUAT
+  // ==========================================================
+  function toggleLoginPasswordVisibility(btn) {
+    const input = document.getElementById("loginPassword");
+    const showing = input.type === "text";
+    input.type = showing ? "password" : "text";
+    btn.textContent = showing ? "👁" : "🙈";
+  }
+
+
+  function doLogin() {
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const msg = document.getElementById("loginMessage");
+    const btn = document.getElementById("loginBtn");
+
+
+
+
+    msg.innerHTML = "";
+    if (!email || !password) {
+      msg.innerHTML = '<span class="error">Vui lòng nhập đầy đủ email và mật khẩu.</span>';
+      return;
+    }
+
+
+
+
+    btn.disabled = true;
+    btn.innerText = "Đang đăng nhập...";
+
+
+
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        btn.disabled = false;
+        btn.innerText = "Đăng nhập";
+
+
+
+
+        if (!result.success) {
+          msg.innerHTML = '<span class="error">' + escapeHtml(result.message) + '</span>';
+          return;
+        }
+
+
+
+
+        session = result;
+        try {
+          localStorage.setItem(TOKEN_KEY, result.token);
+        } catch (storageError) {
+          console.error("Lỗi localStorage:", storageError);
+        }
+        fillUserInfoEverywhere();
+        renderSidebar();
+        showScreen("menu");
+      })
+      .withFailureHandler(function (error) {
+        btn.disabled = false;
+        btn.innerText = "Đăng nhập";
+        msg.innerHTML = '<span class="error">Có lỗi xảy ra: ' + escapeHtml(error.message) + '</span>';
+      })
+      .login(email, password);
+  }
+
+
+
+
+  function doLogout() {
+    const token = localStorage.getItem(TOKEN_KEY);
+    google.script.run.logout(token);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(PAGE_KEY);
+    session = null;
+    khoaListCache = null;
+    deAnCacheByKhoa = {};
+    searchKhoaListCache = null;
+    searchDeAnCacheByKhoa = {};
+    document.getElementById("loginEmail").value = "";
+    document.getElementById("loginPassword").value = "";
+    showScreen("login");
+  }
+
+
+
+
+  // ==========================================================
+  // DIEU HUONG MAN HINH (co kiem tra quyen theo vai tro)
+  // ==========================================================
+  function showScreen(name) {
+    if (name !== "login" && name !== "menu" && session) {
+      const item = MENU_ITEMS.find(function (m) { return m.key === name; });
+      if (item && !roleAllowed(item)) {
+        name = "menu";
+      }
+    }
+
+
+
+
+    document.querySelectorAll(".screen").forEach(function (el) { el.classList.remove("active"); });
+    document.getElementById("screen-" + name).classList.add("active");
+
+    document.body.classList.toggle("shell-mode", isShellScreen_(name));
+    closeSidebarDrawer();
+    if (isShellScreen_(name)) {
+      updateSidebarActiveState(name);
+      updateTopbarTitle(name);
+    }
+
+
+
+
+    if (name !== "login") localStorage.setItem(PAGE_KEY, name);
+
+
+
+
+    if (name === "search") initSearchScreen();
+    if (name === "progress") initProgressScreen();
+    if (name === "report") initReportScreen();
+    if (name === "dangky") initDangKyScreen();
+    if (name === "phancong") initPhanCongScreen();
+    if (name === "noplan2") initNopLan2Screen();
+    if (name === "filechot") initFileChotScreen();
+    if (name === "bcnghiemthu") initBCNghiemThuScreen();
+    if (name === "nghiemthu") initNghiemThuScreen();
+    if (name === "pheduyet") initPheDuyetScreen();
+
+
+
+
+    updateHeaderOffset();
+  }
+
+
+
+
+  function updateHeaderOffset() {
+    const header = document.querySelector(".screen.active .header");
+    if (header) {
+      document.documentElement.style.setProperty("--header-h", header.offsetHeight + "px");
+    }
+  }
+  window.addEventListener("resize", updateHeaderOffset);
+
+
+
+
+  function token() {
+    return localStorage.getItem(TOKEN_KEY);
+  }
+
+
+
+
+  // ==========================================================
+  // XU LY LOI HET HAN PHIEN
+  // ==========================================================
+  function isSessionExpiredError(error) {
+    return !!(error && error.message && error.message.indexOf("hết hạn") !== -1);
+  }
+
+
+
+
+  function handleServerError(error, fallbackLabel) {
+    if (isSessionExpiredError(error)) {
+      showSessionExpiredModal();
+      return;
+    }
+    alert((fallbackLabel ? fallbackLabel + ": " : "Có lỗi xảy ra: ") + error.message);
+  }
+
+
+
+
+  function showSessionExpiredModal() {
+    const bodyHtml =
+      '<p style="text-align:justify;">Phiên làm việc của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục sử dụng hệ thống.</p>' +
+      '<p style="text-align:justify;margin-top:14px;line-height:1.6;">' +
+      '✧ Lưu ý: <b>Hệ thống hiện đang trong quá trình xây dựng và hoàn thiện</b> nên một số chức năng có thể chưa hoạt động ổn định. ' +
+      'Mỗi phiên đăng nhập hiện được duy trì tối đa 06 giờ kể từ thời điểm đăng nhập.</p>' +
+      '<p style="text-align:justify;margin-top:14px;line-height:1.6;">' +
+      '✧ Để hạn chế tình trạng này, <b>khi không sử dụng hệ thống, người dùng nên đăng xuất và đóng tab</b>. ' +
+      'Khi cần tiếp tục sử dụng, vui lòng đăng nhập lại.</p>' +
+      '<p style="text-align:justify;margin-top:14px;line-height:1.6;">' +
+      'Rất mong thông cảm trong thời gian hệ thống được hoàn thiện.<br>Xin trân trọng cảm ơn!</p>';
+
+
+
+
+    openModal("Phiên làm việc đã hết hạn", bodyHtml, "Đăng nhập lại", function () {
+      closeModal();
+      doLogout();
+    }, false, true);
+  }
+
+
+
+
+  // ==========================================================
+  // HAN CHOT THUC HIEN (dung chung cho 7 man hinh) - dua vao Deadline.gs
+  // ==========================================================
+  const DEADLINE_BANNER_IDS = [
+    "dangkyDeadlineBanner", "noplan2DeadlineBanner", "filechotDeadlineBanner",
+    "progressDeadlineBanner", "pheduyetDeadlineBanner", "bcnghiemthuDeadlineBanner",
+    "nghiemthuDeadlineBanner"
+  ];
+
+  function initDeadlineBanner(containerId) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    box.innerHTML = "";
+
+    google.script.run
+      .withSuccessHandler(function (value) { renderDeadlineBanner(containerId, value); })
+      .withFailureHandler(function () { box.innerHTML = ""; })
+      .getSystemDeadline(token());
+  }
+
+  function renderDeadlineBanner(containerId, value) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    const admin = session && String(session.vaiTro).trim() === "Admin";
+
+    if (admin) {
+      box.innerHTML =
+        '<span>HẠN CHÓT THỰC HIỆN:</span>' +
+        '<input type="datetime-local" id="' + containerId + '_input" value="' + escapeAttr(value || "") + '">' +
+        '<button type="button" class="secondary-btn" onclick="saveDeadlineFromBanner(\'' + containerId + '\')">Lưu</button>';
+    } else if (!value) {
+      box.innerHTML = "HẠN CHÓT THỰC HIỆN: (Chưa đặt)";
+    } else {
+      box.innerHTML = "HẠN CHÓT THỰC HIỆN: " + escapeHtml(formatDeadlineDisplay_(value));
+    }
+  }
+
+  // isoValue dang "yyyy-MM-ddTHH:mm" (dinh dang chuan tra ve tu <input type="datetime-local">)
+  function formatDeadlineDisplay_(isoValue) {
+    const m = String(isoValue || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) return isoValue;
+    return m[4] + ":" + m[5] + " " + m[3] + "/" + m[2] + "/" + m[1];
+  }
+
+  function saveDeadlineFromBanner(containerId) {
+    const input = document.getElementById(containerId + "_input");
+    const value = input ? input.value : "";
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) { alert(result.message); return; }
+        // Cap nhat lai TAT CA banner dang mo (neu co) de dong bo hien thi ngay, khong can F5
+        DEADLINE_BANNER_IDS.forEach(function (id) {
+          if (document.getElementById(id)) renderDeadlineBanner(id, value);
+        });
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không lưu được hạn chót"); })
+      .setSystemDeadline(token(), value);
+  }
+
+
+
+
+  // ==========================================================
+  // TRANG TRA CUU (Admin/TVHĐ: xem tat ca khoa/phong; User: khoa/phong cua minh)
+  // ==========================================================
+  function initSearchScreen() {
+    document.getElementById("searchResult").innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+    const tenSelect = document.getElementById("searchTenDeAn");
+    tenSelect.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    tenSelect.disabled = true;
+
+
+
+
+    loadSearchKhoaPhongList(function (list) {
+      const select = document.getElementById("searchKhoaPhong");
+      select.innerHTML = '<option value="">-- Chọn khoa/phòng --</option>';
+      list.forEach(function (item) {
+        const opt = document.createElement("option");
+        opt.value = item; opt.textContent = item;
+        select.appendChild(opt);
+      });
+      select.value = "";
+    });
+  }
+
+
+
+
+  function loadSearchDeAn() {
+    const khoa = document.getElementById("searchKhoaPhong").value;
+    const select = document.getElementById("searchTenDeAn");
+
+
+
+
+    select.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    select.disabled = true;
+
+
+
+
+    document.getElementById("searchResult").innerHTML =
+      '<div class="empty">Chưa có thông tin.</div>';
+
+
+
+
+    if (!khoa) return;
+
+
+
+
+    loadSearchDeAnListForKhoa(khoa, function (list) {
+      list.forEach(function (item) {
+        const opt = document.createElement("option");
+
+
+
+
+        opt.value = item.tendean;
+        opt.textContent = item.tendean;
+
+
+
+
+        select.appendChild(opt);
+      });
+
+
+
+
+      select.disabled = false;
+    });
+  }
+
+
+
+
+  let currentSearchDetailData = []; // du lieu chi tiet lan tra cuu gan nhat (mang cac field)
+  let currentSearchMeta = { isAdmin: false, dangkyId: "", editableFieldsForNonAdmin: [] };
+  let currentSearchKhoaPhong = "";
+  let currentSearchTenDeAn = "";
+  let isEditingDeAn = false; // dang o che do Sua truc tiep trong bang thong tin hay khong
+
+
+
+
+  const LOCKED_DEAN_FIELDS = ["Madean_sangkien", "Khoaphong", "Tendean", "Phanloai", "Chi_so", "Diem_TB_lan1", "Diem_TB_lan_2", "Duyet_Khongduyet"];
+  const COMPUTED_DEAN_FIELDS = ["Diem_TB_lan1", "Diem_TB_lan_2", "Duyet_Khongduyet", "Phanloai"];
+  const LONG_TEXT_HINT = ["Nhan_xet", "Ghichu", "NoidungCV"];
+  const FILE_LINK_HEADERS = ["File đầu", "File sửa lần 1", "File cuối"];
+
+
+
+
+  function loadSearchDetail() {
+    const khoaPhong = document.getElementById("searchKhoaPhong").value.trim();
+    const tenDeAn = document.getElementById("searchTenDeAn").value.trim();
+
+
+
+
+    const resultBox = document.getElementById("searchResult");
+    isEditingDeAn = false;
+
+
+
+
+    if (!khoaPhong || !tenDeAn) {
+      resultBox.innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+      return;
+    }
+
+
+
+
+    resultBox.innerHTML = '<div class="empty">Đang tải...</div>';
+
+
+
+
+    google.script.run
+      .withSuccessHandler(function (data) {
+        currentSearchDetailData = (data && data.fields) || [];
+        currentSearchMeta = data ? { isAdmin: !!data.isAdmin, dangkyId: data.dangkyId || "", editableFieldsForNonAdmin: data.editableFieldsForNonAdmin || [] } : { isAdmin: false, dangkyId: "", editableFieldsForNonAdmin: [] };
+        currentSearchKhoaPhong = khoaPhong;
+        currentSearchTenDeAn = tenDeAn;
+        renderDetail(resultBox);
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) {
+          resultBox.innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+          showSessionExpiredModal();
+          return;
+        }
+        resultBox.innerHTML =
+          '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getDeAnDetail(token(), khoaPhong, tenDeAn);
+  }
+
+
+
+
+  function renderDetail(container) {
+    const data = currentSearchDetailData;
+    if (!data || data.length === 0) {
+      container.innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+      return;
+    }
+
+
+
+
+    const admin = currentSearchMeta.isAdmin;
+    const editableForNonAdmin = currentSearchMeta.editableFieldsForNonAdmin || [];
+    let html = '<h3 style="color:var(--color-primary);margin-top:0;">Thông tin đề án/sáng kiến</h3><table class="info-table">';
+
+
+
+
+    data.forEach(function (item) {
+      const isLocked = LOCKED_DEAN_FIELDS.indexOf(item.rawHeader) !== -1;
+      const isNonAdminEditable = editableForNonAdmin.indexOf(item.rawHeader) !== -1;
+      const showAsInput = isEditingDeAn && !isLocked && (admin || isNonAdminEditable);
+      let cell;
+
+
+
+
+      if (item.rawHeader === "Chi_so") {
+        cell = renderChiSoCell(item);
+      } else if (showAsInput) {
+        const fieldId = "editField_" + item.rawHeader;
+        const rawValue = item.value === "---" ? "" : item.value;
+
+
+
+
+        if (item.options && item.options.length > 0) {
+          let optsHtml = '<option value="">-- Chọn --</option>';
+          let matched = false;
+          item.options.forEach(function (opt) {
+            const optStr = String(opt);
+            const isSelected = optStr === rawValue;
+            if (isSelected) matched = true;
+            optsHtml += '<option' + (isSelected ? " selected" : "") + '>' + escapeHtml(optStr) + '</option>';
+          });
+          if (rawValue && !matched) {
+            optsHtml += '<option selected>' + escapeHtml(rawValue) + '</option>';
+          }
+          cell = '<select id="' + fieldId + '">' + optsHtml + '</select>';
+        } else {
+          cell = '<textarea id="' + fieldId + '" class="detail-edit-textarea">' + escapeHtml(rawValue) + '</textarea>';
+        }
+      } else {
+        const isStatus = item.header === "Trạng thái";
+        const isFileLink = FILE_LINK_HEADERS.indexOf(item.header) !== -1;
+        if (isFileLink) {
+          cell = renderFileLinksCell(item.value);
+        } else if (isStatus) {
+          cell = '<span class="status">' + escapeHtml(item.value) + '</span>';
+        } else {
+          cell = nl2br(item.value);
+        }
+        if (isEditingDeAn && admin && COMPUTED_DEAN_FIELDS.indexOf(item.rawHeader) !== -1) {
+          cell += ' <span style="color:#999;font-size:12px;">(Tự động tính theo công thức trong Sheet)</span>';
+        }
+      }
+
+
+
+
+      if (item.rawHeader === "Chunhiem" || item.rawHeader === "Thanhvien") {
+        cell += renderYeuCauSuaBadgeHtml_(item.rawHeader, item.pendingCount || 0);
+      }
+
+
+
+
+      html += '<tr><th>' + escapeHtml(item.header) + '</th><td>' + cell +
+        '<div class="yc-panel" id="ycPanel_' + item.rawHeader + '" style="display:none;"></div></td></tr>';
+    });
+
+
+
+
+    html += '</table>';
+
+
+
+
+    if (isEditingDeAn) {
+      if (admin) html += '<div class="file-note" style="margin-top:12px;">Với các cột File: dán link Google Drive, nhiều file cách nhau bởi dấu phẩy. Với Thời gian bắt đầu/kết thúc: nhập dd/MM/yyyy (không cần giờ).</div>';
+      else html += '<div class="file-note" style="margin-top:12px;">Bạn chỉ có thể gửi yêu cầu chỉnh sửa Chủ nhiệm/Thành viên - yêu cầu sẽ chờ Admin duyệt trước khi áp dụng.</div>';
+      html += '<div style="display:flex;gap:10px;margin-top:14px;">' +
+        '<button type="button" class="primary" style="width:auto;padding:10px 20px;" id="saveDeAnBtn" onclick="saveDeAnEdit()">' + (admin ? "Lưu" : "Gửi yêu cầu") + '</button>' +
+        '<button type="button" class="secondary-btn" onclick="cancelDeAnEdit()">Hủy</button>' +
+        '</div>';
+    } else {
+      html += '<button type="button" class="secondary-btn" style="margin-top:16px;" onclick="enterDeAnEditMode()">Chỉnh sửa</button>';
+    }
+
+
+
+
+    container.innerHTML = html;
+  }
+
+
+
+
+  function renderYeuCauSuaBadgeHtml_(rawHeader, pendingCount) {
+    if (!pendingCount) return ' <span class="yc-badge yc-badge-zero" onclick="toggleYeuCauSuaPanel(\'' + rawHeader + '\')" title="Xem lịch sử yêu cầu chỉnh sửa">0</span>';
+    return ' <span class="yc-badge" onclick="toggleYeuCauSuaPanel(\'' + rawHeader + '\')" title="Có yêu cầu chỉnh sửa đang chờ duyệt">' + pendingCount + '</span>';
+  }
+
+
+
+
+  function toggleYeuCauSuaPanel(rawHeader) {
+    const panel = document.getElementById("ycPanel_" + rawHeader);
+    if (!panel) return;
+    const showing = panel.style.display !== "none";
+    if (showing) { panel.style.display = "none"; return; }
+    panel.style.display = "block";
+    panel.innerHTML = '<div class="empty" style="padding:6px 0;">Đang tải...</div>';
+
+    google.script.run
+      .withSuccessHandler(function (list) { renderYeuCauSuaPanelList_(rawHeader, list || []); })
+      .withFailureHandler(function (error) { panel.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>'; })
+      .getYeuCauSuaList(token(), currentSearchMeta.dangkyId, rawHeader);
+  }
+
+
+
+
+  function renderYeuCauSuaPanelList_(rawHeader, list) {
+    const panel = document.getElementById("ycPanel_" + rawHeader);
+    if (!panel) return;
+    if (list.length === 0) { panel.innerHTML = '<div class="empty" style="padding:6px 0;">Chưa có yêu cầu chỉnh sửa nào.</div>'; return; }
+
+    const admin = currentSearchMeta.isAdmin;
+    const myEmail = session ? String(session.email || "").toLowerCase() : "";
+    let html = '<div class="yc-list">';
+    list.forEach(function (r) {
+      html += '<div class="yc-item yc-item-' + (r.trangThai === "Chờ duyệt" ? "pending" : (r.trangThai === "Đã duyệt" ? "accepted" : "rejected")) + '">';
+      html += '<div class="yc-item-header"><b>' + escapeHtml(r.nguoiGuiHoTen) + '</b> · ' + escapeHtml(r.thoiGianGui) + ' · <i>' + escapeHtml(r.trangThai) + '</i></div>';
+      html += '<div class="yc-item-body">Cũ: ' + escapeHtml(r.truongCu || "(trống)") + '<br>Mới: ' + escapeHtml(r.truongMoi) + '</div>';
+
+      if (r.trangThai === "Chờ duyệt") {
+        if (admin) {
+          html += '<div class="yc-item-actions">' +
+            '<button type="button" class="secondary-btn" style="width:auto;padding:5px 10px;font-size:13px;" onclick="ycChinhSua(\'' + r.id + '\', \'' + rawHeader + '\')">Chỉnh sửa</button>' +
+            '<button type="button" class="primary" style="width:auto;padding:5px 10px;font-size:13px;" onclick="ycXuLy(\'' + r.id + '\', \'ChapNhan\', \'' + rawHeader + '\', null)">Chấp nhận</button>' +
+            '<button type="button" class="danger-btn" style="width:auto;padding:5px 10px;font-size:13px;" onclick="ycXuLy(\'' + r.id + '\', \'TuChoi\', \'' + rawHeader + '\', null)">Từ chối</button>' +
+            '</div>';
+        } else if (myEmail) {
+          html += '<div class="yc-item-actions">' +
+            '<button type="button" class="danger-btn" style="width:auto;padding:5px 10px;font-size:13px;" onclick="ycXoa(\'' + r.id + '\', \'' + rawHeader + '\')">Xóa yêu cầu</button>' +
+            '</div>';
+        }
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+    panel.innerHTML = html;
+  }
+
+
+
+
+  function ycXuLy(id, hanhDong, rawHeader, giaTriApDung) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) { alert(result.message); return; }
+        toggleYeuCauSuaPanel(rawHeader);
+        loadSearchDetail();
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không xử lý được yêu cầu"); })
+      .xuLyYeuCauSua(token(), id, hanhDong, giaTriApDung);
+  }
+
+
+
+
+  function ycChinhSua(id, rawHeader) {
+    const newValue = prompt("Nhập nội dung Admin muốn áp dụng (thay cho đề xuất ban đầu):");
+    if (newValue === null) return;
+    if (!newValue.trim()) { alert("Nội dung không được để trống."); return; }
+    ycXuLy(id, "ChapNhan", rawHeader, newValue.trim());
+  }
+
+
+
+
+  function ycXoa(id, rawHeader) {
+    if (!confirm("Xóa yêu cầu này? Không thể hoàn tác.")) return;
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) { alert(result.message); return; }
+        toggleYeuCauSuaPanel(rawHeader);
+        loadSearchDetail();
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không xóa được yêu cầu") })
+      .xoaYeuCauSua(token(), id);
+  }
+
+
+
+
+  function renderChiSoCell(item) {
+    if (item.isChiSoLink) {
+      return '<a class="file-link" onclick="showChiSoPopupFromSearch()">' + escapeHtml(item.value) + '</a>';
+    }
+    return escapeHtml(item.value);
+  }
+
+
+
+
+  function showChiSoPopupFromSearch() {
+    const chiSoItem = currentSearchDetailData.find(function (i) { return i.rawHeader === "Chi_so"; });
+    showChiSoPopup((chiSoItem && chiSoItem.chiSoList) || []);
+  }
+
+
+
+
+  function showChiSoPopup(list) {
+    chiSoModalList = list || [];
+    chiSoModalEditing = false;
+    renderChiSoModal();
+    document.getElementById("chisoModalOverlay").classList.add("show");
+  }
+
+
+
+
+  function renderChiSoModal() {
+    const admin = session && String(session.vaiTro).trim() === "Admin";
+    let html = '<div class="table-wrapper"><table class="chiso-popup-table"><thead><tr><th>Chỉ số</th><th>Ngưỡng đạt</th></tr></thead><tbody>';
+
+
+
+
+    if (!chiSoModalList || chiSoModalList.length === 0) {
+      html += '<tr><td colspan="2" style="text-align:center;color:#777;">Không có dữ liệu.</td></tr>';
+    } else {
+      chiSoModalList.forEach(function (row, i) {
+        if (chiSoModalEditing) {
+          html += '<tr>' +
+            '<td><input type="text" id="chisoEdit_chiso_' + i + '" value="' + escapeAttr(row.chiso) + '"></td>' +
+            '<td><input type="text" id="chisoEdit_nguongdat_' + i + '" value="' + escapeAttr(row.nguongdat) + '"></td>' +
+          '</tr>';
+        } else {
+          const badge = (row.pendingChiSo || row.pendingNguongdat)
+            ? ' <span class="yc-badge" onclick="toggleYeuCauSuaPanelChiSo(' + row.rowNumber + ')" title="Có yêu cầu chỉnh sửa đang chờ duyệt">' + Math.max(row.pendingChiSo || 0, row.pendingNguongdat || 0) + '</span>'
+            : ' <span class="yc-badge yc-badge-zero" onclick="toggleYeuCauSuaPanelChiSo(' + row.rowNumber + ')" title="Xem lịch sử yêu cầu chỉnh sửa">0</span>';
+          html += '<tr><td>' + escapeHtml(row.chiso) + badge + '</td><td>' + escapeHtml(row.nguongdat) + '</td></tr>' +
+            '<tr><td colspan="2"><div class="yc-panel" id="ycPanel_chiso_' + row.rowNumber + '" style="display:none;" data-rownumber="' + row.rowNumber + '"></div></td></tr>';
+        }
+      });
+    }
+    html += '</tbody></table></div>';
+    document.getElementById("chisoModalBody").innerHTML = html;
+
+
+
+
+    const footer = document.getElementById("chisoModalFooter");
+    if (!chiSoModalList || chiSoModalList.length === 0) {
+      footer.innerHTML = "";
+      return;
+    }
+
+
+
+
+    if (chiSoModalEditing) {
+      footer.innerHTML =
+        '<button type="button" class="modal-btn-secondary" onclick="cancelEditChiSoModal()">Hủy</button>' +
+        '<button type="button" class="modal-btn-primary" id="saveChiSoBtn" onclick="saveChiSoModal()">' + (admin ? "Lưu" : "Gửi yêu cầu") + '</button>';
+    } else {
+      footer.innerHTML =
+        '<button type="button" class="modal-btn-primary" style="flex:none;width:100%;" onclick="enterEditChiSoModal()">Chỉnh sửa</button>';
+    }
+  }
+
+
+
+
+  function toggleYeuCauSuaPanelChiSo(rowNumber) {
+    const rawHeader = "chiso_" + rowNumber;
+    const panel = document.getElementById("ycPanel_" + rawHeader);
+    if (!panel) return;
+    const showing = panel.style.display !== "none";
+    if (showing) { panel.style.display = "none"; return; }
+    panel.style.display = "block";
+    panel.innerHTML = '<div class="empty" style="padding:6px 0;">Đang tải...</div>';
+
+    google.script.run
+      .withSuccessHandler(function (list) { renderYeuCauSuaPanelList_(rawHeader, list || []); })
+      .withFailureHandler(function (error) { panel.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>'; })
+      .getYeuCauSuaListChiSo(token(), rowNumber);
+  }
+
+
+
+
+  function enterEditChiSoModal() {
+    chiSoModalEditing = true;
+    renderChiSoModal();
+  }
+
+
+
+
+  function cancelEditChiSoModal() {
+    chiSoModalEditing = false;
+    renderChiSoModal();
+  }
+
+
+
+
+  function saveChiSoModal() {
+    const admin = session && String(session.vaiTro).trim() === "Admin";
+    const btn = document.getElementById("saveChiSoBtn");
+    if (btn) { btn.disabled = true; btn.innerText = "Đang " + (admin ? "lưu" : "gửi") + "..."; }
+
+    if (admin) {
+      const updates = chiSoModalList.map(function (row, i) {
+        const chisoEl = document.getElementById("chisoEdit_chiso_" + i);
+        const nguongdatEl = document.getElementById("chisoEdit_nguongdat_" + i);
+        return {
+          rowNumber: row.rowNumber,
+          chiso: chisoEl ? chisoEl.value.trim() : row.chiso,
+          nguongdat: nguongdatEl ? nguongdatEl.value.trim() : row.nguongdat
+        };
+      });
+
+      google.script.run
+        .withSuccessHandler(function (result) {
+          if (!result.success) { if (btn) { btn.disabled = false; btn.innerText = "Lưu"; } alert(result.message); return; }
+          chiSoModalEditing = false;
+          loadSearchDetail();
+          closeChiSoModal();
+        })
+        .withFailureHandler(function (error) {
+          if (btn) { btn.disabled = false; btn.innerText = "Lưu"; }
+          handleServerError(error, "Không lưu được");
+        })
+        .updateChiSoRows(token(), updates);
+      return;
+    }
+
+    const dangkyId = currentSearchMeta.dangkyId;
+    const requests = [];
+    chiSoModalList.forEach(function (row, i) {
+      const chisoEl = document.getElementById("chisoEdit_chiso_" + i);
+      const nguongdatEl = document.getElementById("chisoEdit_nguongdat_" + i);
+      const newChiSo = chisoEl ? chisoEl.value.trim() : row.chiso;
+      const newNguongdat = nguongdatEl ? nguongdatEl.value.trim() : row.nguongdat;
+      if (newChiSo !== row.chiso) requests.push({ chiSoRowNumber: row.rowNumber, dangkyId: dangkyId, tenTruong: "Chi_so", truongMoi: newChiSo });
+      if (newNguongdat !== row.nguongdat) requests.push({ chiSoRowNumber: row.rowNumber, dangkyId: dangkyId, tenTruong: "Nguongdat", truongMoi: newNguongdat });
+    });
+
+    if (requests.length === 0) {
+      if (btn) { btn.disabled = false; btn.innerText = "Gửi yêu cầu"; }
+      alert("Không có nội dung nào thay đổi để gửi yêu cầu.");
+      return;
+    }
+
+    let remaining = requests.length;
+    let hadError = false;
+    requests.forEach(function (req) {
+      google.script.run
+        .withSuccessHandler(function (result) {
+          if (!result.success) hadError = true;
+          remaining--;
+          if (remaining === 0) finishChiSoRequestBatch_(hadError);
+        })
+        .withFailureHandler(function () {
+          hadError = true;
+          remaining--;
+          if (remaining === 0) finishChiSoRequestBatch_(hadError);
+        })
+        .submitYeuCauSuaChiSo(token(), req);
+    });
+  }
+
+
+
+
+  function finishChiSoRequestBatch_(hadError) {
+    const btn = document.getElementById("saveChiSoBtn");
+    if (btn) { btn.disabled = false; btn.innerText = "Gửi yêu cầu"; }
+    if (hadError) { alert("Một số yêu cầu chưa gửi được, vui lòng thử lại."); return; }
+    alert("Đã gửi yêu cầu chỉnh sửa, chờ Admin duyệt.");
+    chiSoModalEditing = false;
+    loadSearchDetail();
+    closeChiSoModal();
+  }
+
+
+
+
+  function closeChiSoModal() {
+    document.getElementById("chisoModalOverlay").classList.remove("show");
+    chiSoModalEditing = false;
+  }
+
+
+
+
+  function renderFileLinksCell(value) {
+    const raw = String(value || "").trim();
+    if (!raw || raw === "---") return escapeHtml(raw || "");
+
+
+
+
+    const links = raw.split(",").map(function (u) {
+      u = u.trim();
+      if (!u) return "";
+      if (!/^https?:\/\//i.test(u)) return escapeHtml(u);
+      return '<a class="file-link" href="' + escapeAttr(u) + '" target="_blank" rel="noopener">Xem file</a>';
+    }).filter(Boolean);
+
+
+
+
+    return links.join('<br>');
+  }
+
+
+
+
+  function enterDeAnEditMode() {
+    isEditingDeAn = true;
+    renderDetail(document.getElementById("searchResult"));
+  }
+
+
+
+
+  function cancelDeAnEdit() {
+    isEditingDeAn = false;
+    renderDetail(document.getElementById("searchResult"));
+  }
+
+
+
+
+  function saveDeAnEdit() {
+    const admin = currentSearchMeta.isAdmin;
+    const updates = {};
+    currentSearchDetailData.forEach(function (item) {
+      if (LOCKED_DEAN_FIELDS.indexOf(item.rawHeader) !== -1) return;
+      const el = document.getElementById("editField_" + item.rawHeader);
+      if (el) updates[item.rawHeader] = el.value;
+    });
+
+
+
+
+    const btn = document.getElementById("saveDeAnBtn");
+    const btnLabel = admin ? "Lưu" : "Gửi yêu cầu";
+    btn.disabled = true;
+    btn.innerText = "Đang " + (admin ? "lưu" : "gửi") + "...";
+
+
+
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) {
+          btn.disabled = false;
+          btn.innerText = btnLabel;
+          alert(result.message);
+          return;
+        }
+        loadSearchDetail();
+      })
+      .withFailureHandler(function (error) {
+        btn.disabled = false;
+        btn.innerText = btnLabel;
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        alert("Có lỗi xảy ra: " + error.message);
+      })
+      .updateDeAnDetail(token(), currentSearchKhoaPhong, currentSearchTenDeAn, updates);
+  }
+
+
+
+
+  // ==========================================================
+  // TRANG CAP NHAT TIEN DO
+  // ==========================================================
+  function initProgressScreen() {
+    document.getElementById("pEmail").value = session.email;
+    document.getElementById("pMaDeAn").value = "";
+    document.getElementById("pTrangThai").value = "";
+    document.getElementById("pNoiDung").value = "";
+    document.getElementById("progressMessage").innerHTML = "";
+    document.getElementById("progressHistory").innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+
+
+
+
+    selectedFiles = [];
+    const fileListBox = document.getElementById("pFileList");
+    if (fileListBox) fileListBox.innerHTML = "";
+
+
+
+
+    hideChiSoSection();
+    initDeadlineBanner("progressDeadlineBanner");
+
+
+
+
+    const tenSelect = document.getElementById("pTenDeAn");
+    tenSelect.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    tenSelect.disabled = true;
+
+
+
+
+    loadKhoaPhongList(function (list) {
+      const select = document.getElementById("pKhoaPhong");
+      select.innerHTML = '<option value="">-- Chọn khoa/phòng --</option>';
+      list.forEach(function (item) {
+        const opt = document.createElement("option");
+        opt.value = item; opt.textContent = item;
+        select.appendChild(opt);
+      });
+
+
+
+
+      if (list.length === 1) {
+        select.value = list[0];
+        loadProgressDeAn();
+      }
+    });
+  }
+
+
+
+
+  function loadProgressDeAn() {
+    const khoa = document.getElementById("pKhoaPhong").value;
+    const select = document.getElementById("pTenDeAn");
+    select.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    select.disabled = true;
+    document.getElementById("pMaDeAn").value = "";
+    document.getElementById("progressHistory").innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+    hideChiSoSection();
+    if (!khoa) return;
+
+
+
+
+    loadDeAnListForKhoa(khoa, function (list) {
+      if (list.length === 0) {
+        select.innerHTML = '<option value="">Không có đề án/sáng kiến</option>';
+        return;
+      }
+      list.forEach(function (item) {
+        const opt = document.createElement("option");
+        opt.value = item.madean; opt.textContent = item.tendean;
+        select.appendChild(opt);
+      });
+      select.disabled = false;
+
+
+
+
+      if (list.length === 1) {
+        select.value = list[0].madean;
+        selectProgressDeAn();
+      }
+    });
+  }
+
+
+
+
+  function selectProgressDeAn() {
+    const select = document.getElementById("pTenDeAn");
+    const madean = select.value.trim();
+    document.getElementById("pMaDeAn").value = madean;
+
+
+
+
+    if (!madean) {
+      document.getElementById("progressHistory").innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+      hideChiSoSection();
+      return;
+    }
+    loadProgressHistory(madean);
+    loadChiSoSectionForDeAn(madean);
+  }
+
+
+
+
+  function loadProgressHistory(madean) {
+    const box = document.getElementById("progressHistory");
+    box.innerHTML = '<div class="empty">Đang tải...</div>';
+
+
+
+
+    google.script.run
+      .withSuccessHandler(function (data) { renderHistory(data); })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) {
+          box.innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+          showSessionExpiredModal();
+          return;
+        }
+        box.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getProgressHistory(token(), madean);
+  }
+
+
+
+
+  function renderHistory(data) {
+    currentHistoryData = data || [];
+    const box = document.getElementById("progressHistory");
+    if (!data || data.length === 0) {
+      box.innerHTML = '<div class="empty">Chưa có thông tin.</div>';
+      return;
+    }
+
+
+
+
+    let html = '<div class="table-wrapper"><table class="history"><thead><tr>' +
+      '<th>Trạng thái</th><th>Nội dung công việc đang thực hiện</th><th>File minh chứng (nếu có)</th>' +
+      '<th>Email</th><th>Thời gian</th><th>Thao tác</th></tr></thead><tbody>';
+
+
+
+
+    data.forEach(function (row) {
+      const editedTag = row.daChinhSua ? '<div class="tag-edited">' + escapeHtml(row.daChinhSua) + '</div>' : '';
+      let fileCell = '';
+      if (row.fileUrl) {
+        fileCell = row.fileUrl.split(',').map(function (u) {
+          u = u.trim();
+          if (!u) return '';
+          return '<a class="file-link" href="' + escapeAttr(u) + '" target="_blank">Xem file</a>';
+        }).filter(Boolean).join('<br>');
+      }
+
+
+
+
+      html += '<tr id="row-' + escapeAttr(row.id) + '">' +
+        '<td class="status">' + escapeHtml(row.trangThai) + editedTag + '</td>' +
+        '<td>' + nl2br(row.noiDung) + '</td>' +
+        '<td>' + fileCell + '</td>' +
+        '<td>' + escapeHtml(row.email) + '</td>' +
+        '<td>' + escapeHtml(row.thoiGian) + '</td>' +
+        '<td>' +
+          '<button class="icon-btn" title="Sửa" onclick="editHistoryRow(\'' + escapeAttr(row.id) + '\', \'' + escapeAttr(row.madean) + '\')">✏️</button>' +
+          '<button class="icon-btn" title="Xóa" onclick="deleteHistoryRow(\'' + escapeAttr(row.id) + '\', \'' + escapeAttr(row.madean) + '\')">🗑️</button>' +
+        '</td>' +
+      '</tr>';
+    });
+
+
+
+
+    html += '</tbody></table></div>';
+    box.innerHTML = html;
+  }
+
+
+
+
+  // ==========================================================
+  // BANG "CAP NHAT TIEN DO DO LUONG"
+  // ==========================================================
+  function hideChiSoSection() {
+    progressChiSoList = [];
+    const box = document.getElementById("pChiSoSection");
+    if (box) box.style.display = "none";
+    const tbody = document.querySelector("#pChiSoTable tbody");
+    if (tbody) tbody.innerHTML = "";
+  }
+
+
+
+
+  function loadChiSoSectionForDeAn(madean) {
+    hideChiSoSection();
+    if (!/^ĐA/i.test(madean)) return;
+
+
+
+
+    const khoa = document.getElementById("pKhoaPhong").value.trim();
+    const tenSelect = document.getElementById("pTenDeAn");
+    const tenDeAn = tenSelect.selectedIndex >= 0 ? tenSelect.options[tenSelect.selectedIndex].text.trim() : "";
+
+
+
+
+    google.script.run
+      .withSuccessHandler(function (list) { renderChiSoSection(list || []); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách chỉ số"); })
+      .getChiSoForProgress(token(), khoa, tenDeAn, madean);
+  }
+
+
+
+
+  function renderChiSoSection(list) {
+    const box = document.getElementById("pChiSoSection");
+    const tbody = document.querySelector("#pChiSoTable tbody");
+    if (!box || !tbody) return;
+
+
+
+
+    if (!list || list.length === 0) {
+      box.style.display = "none";
+      tbody.innerHTML = "";
+      progressChiSoList = [];
+      return;
+    }
+
+
+
+
+    progressChiSoList = list;
+    let html = "";
+    list.forEach(function (ten, i) {
+      html += '<tr><td>' + escapeHtml(ten) + '</td><td><input type="text" id="chiSoInput_' + i + '" placeholder="Nhập kết quả đo lường"></td></tr>';
+    });
+    tbody.innerHTML = html;
+    box.style.display = "block";
+  }
+
+
+
+
+  function collectChiSoUpdates() {
+    return progressChiSoList.map(function (ten, i) {
+      const el = document.getElementById("chiSoInput_" + i);
+      return { tenChiSo: ten, tyLeHienTai: el ? el.value.trim() : "" };
+    });
+  }
+
+
+
+
+  // ==========================================================
+  // FILE MINH CHUNG (FORM CHINH)
+  // ==========================================================
+  function handleFileSelect(e) {
+    const newFiles = Array.from(e.target.files || []);
+    newFiles.forEach(function (f) {
+      if (selectedFiles.length < 5) selectedFiles.push(f);
+    });
+    e.target.value = "";
+    renderFileList();
+  }
+
+
+
+
+  function renderFileList() {
+    const box = document.getElementById("pFileList");
+    if (!box) return;
+    if (selectedFiles.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    selectedFiles.forEach(function (f, i) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-remove" title="Bỏ file này" onclick="removeSelectedFile(' + i + ')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+
+
+
+  function removeSelectedFile(index) {
+    selectedFiles.splice(index, 1);
+    renderFileList();
+  }
+
+
+
+
+  // ==========================================================
+  // MODAL DUNG CHUNG
+  // ==========================================================
+  function openModal(title, bodyHtml, confirmText, onConfirm, danger, centerTitle) {
+    const titleEl = document.getElementById("modalTitle");
+    titleEl.innerText = title;
+    titleEl.style.textAlign = centerTitle ? "center" : "";
+    document.getElementById("modalBody").innerHTML = bodyHtml;
+
+
+
+
+    const confirmBtn = document.getElementById("modalConfirmBtn");
+    confirmBtn.disabled = false;
+    confirmBtn.innerText = confirmText;
+    confirmBtn.className = "modal-btn-primary" + (danger ? " danger" : "");
+
+
+
+
+    modalConfirmCallback = onConfirm;
+    confirmBtn.onclick = function () {
+      if (modalConfirmCallback) modalConfirmCallback();
+    };
+
+
+
+
+    document.getElementById("modalOverlay").classList.add("show");
+  }
+
+
+
+
+  function closeModal() {
+    document.getElementById("modalOverlay").classList.remove("show");
+    modalConfirmCallback = null;
+  }
+
+
+  // ==========================================================
+  // DOI MAT KHAU
+  // ==========================================================
+  function toggleModalPasswordVisibility(btn, inputId) {
+    const input = document.getElementById(inputId);
+    const showing = input.type === "text";
+    input.type = showing ? "password" : "text";
+    btn.textContent = showing ? "👁" : "🙈";
+  }
+
+
+  function openChangePasswordModal() {
+    if (!session) return;
+
+    const bodyHtml =
+      '<div class="form-group">' +
+        '<label for="cpOldPassword">Mật khẩu cũ</label>' +
+        '<div class="password-field-wrap">' +
+          '<input type="password" id="cpOldPassword" autocomplete="current-password">' +
+          '<button type="button" class="password-toggle-btn" onclick="toggleModalPasswordVisibility(this, \'cpOldPassword\')">👁</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label for="cpNewPassword">Mật khẩu mới</label>' +
+        '<div class="password-field-wrap">' +
+          '<input type="password" id="cpNewPassword" autocomplete="new-password">' +
+          '<button type="button" class="password-toggle-btn" onclick="toggleModalPasswordVisibility(this, \'cpNewPassword\')">👁</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="changePasswordMessage" class="msg"></div>';
+
+    openModal("Đổi mật khẩu", bodyHtml, "Lưu", function () {
+      const oldPw = document.getElementById("cpOldPassword").value;
+      const newPw = document.getElementById("cpNewPassword").value.trim();
+      const msg = document.getElementById("changePasswordMessage");
+      msg.innerHTML = "";
+
+      if (!oldPw) { msg.innerHTML = '<span class="error">Vui lòng nhập mật khẩu cũ.</span>'; return; }
+      if (!newPw) { msg.innerHTML = '<span class="error">Vui lòng nhập mật khẩu mới.</span>'; return; }
+
+      const confirmBtn = document.getElementById("modalConfirmBtn");
+      confirmBtn.disabled = true;
+      confirmBtn.innerText = "Đang lưu...";
+
+      google.script.run
+        .withSuccessHandler(function (result) {
+          confirmBtn.disabled = false;
+          confirmBtn.innerText = "Lưu";
+          if (!result.success) {
+            msg.innerHTML = '<span class="error">' + escapeHtml(result.message) + '</span>';
+            return;
+          }
+          document.getElementById("cpOldPassword").value = "";
+          document.getElementById("cpNewPassword").value = "";
+          msg.innerHTML = '<span class="success">Đã đổi mật khẩu thành công.</span>';
+        })
+        .withFailureHandler(function (error) {
+          confirmBtn.disabled = false;
+          confirmBtn.innerText = "Lưu";
+          if (isSessionExpiredError(error)) { closeModal(); showSessionExpiredModal(); return; }
+          msg.innerHTML = '<span class="error">Có lỗi xảy ra: ' + escapeHtml(error.message) + '</span>';
+        })
+        .changePassword(token(), oldPw, newPw);
+    });
+  }
+
+
+
+
+  // ==========================================================
+  // MODAL SUA: file minh chung
+  // ==========================================================
+  function renderModalExistingFiles() {
+    const box = document.getElementById("modalExistingFiles");
+    if (!box) return;
+    if (modalKeepFileUrls.length === 0) {
+      box.innerHTML = '<div class="empty" style="padding:10px 0;">Không có file nào.</div>';
+      return;
+    }
+    let html = '<div class="file-chip-list">';
+    modalKeepFileUrls.forEach(function (url, i) {
+      const label = modalFileNameByUrl[url] || ("File " + (i + 1));
+      html += '<div class="file-chip">' +
+        '<a class="file-name" href="' + escapeAttr(url) + '" target="_blank" title="' + escapeAttr(url) + '">' + escapeHtml(label) + '</a>' +
+        '<span class="file-remove" title="Bỏ file này" onclick="removeModalExistingFile(' + i + ')">✕</span>' +
+      '</div>';
+    });
+    html += '</div>';
+    box.innerHTML = html;
+  }
+
+
+
+
+  function removeModalExistingFile(index) {
+    modalKeepFileUrls.splice(index, 1);
+    renderModalExistingFiles();
+  }
+
+
+
+
+  function handleModalFileSelect(e) {
+    const newFiles = Array.from(e.target.files || []);
+    newFiles.forEach(function (f) {
+      if (modalKeepFileUrls.length + modalNewFiles.length < 5) modalNewFiles.push(f);
+    });
+    e.target.value = "";
+    renderModalNewFileList();
+  }
+
+
+
+
+  function renderModalNewFileList() {
+    const box = document.getElementById("modalNewFileList");
+    if (!box) return;
+    if (modalNewFiles.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    modalNewFiles.forEach(function (f, i) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-remove" title="Bỏ file này" onclick="removeModalNewFile(' + i + ')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+
+
+
+  function removeModalNewFile(index) {
+    modalNewFiles.splice(index, 1);
+    renderModalNewFileList();
+  }
+
+
+
+
+  function editHistoryRow(id, madean) {
+    const row = currentHistoryData.find(function (r) { return String(r.id) === String(id); });
+    const currentTrangThai = row ? row.trangThai : "";
+    const currentNoiDung = row ? row.noiDung : "";
+    const currentFileUrl = row ? row.fileUrl : "";
+
+
+
+
+    modalKeepFileUrls = currentFileUrl
+      ? currentFileUrl.split(",").map(function (u) { return u.trim(); }).filter(Boolean)
+      : [];
+    modalNewFiles = [];
+    modalFileNameByUrl = {};
+
+
+
+
+    const statusOptions = [
+      "Đang thu thập số liệu", "Đang thực hiện", "Đang viết báo cáo",
+      "Đang nghiệm thu", "Đã hoàn thành nghiệm thu"
+    ];
+
+
+
+
+    const optionsHtml = statusOptions.map(function (opt) {
+      const selected = opt === currentTrangThai ? " selected" : "";
+      return "<option" + selected + ">" + escapeHtml(opt) + "</option>";
+    }).join("");
+
+
+
+
+    const bodyHtml =
+      '<div class="form-group">' +
+        '<label for="modalTrangThai">Trạng thái</label>' +
+        '<select id="modalTrangThai">' + optionsHtml + "</select>" +
+      "</div>" +
+      '<div class="form-group">' +
+        '<label for="modalNoiDung">Nội dung công việc</label>' +
+        '<textarea id="modalNoiDung">' + escapeHtml(currentNoiDung) + "</textarea>" +
+      "</div>" +
+      '<div class="form-group">' +
+        '<label>File minh chứng hiện có</label>' +
+        '<div id="modalExistingFiles"></div>' +
+      "</div>" +
+      '<div class="form-group">' +
+        '<label for="modalFileInput">Thêm file minh chứng mới</label>' +
+        '<input type="file" id="modalFileInput" multiple style="display:none" onchange="handleModalFileSelect(event)">' +
+        '<button type="button" class="secondary-btn" onclick="document.getElementById(\'modalFileInput\').click()">+ Chọn file</button>' +
+        '<div id="modalNewFileList" class="file-chip-list"></div>' +
+        '<div class="file-note">Tổng số file (hiện có + mới) tối đa 5. Bỏ file hiện có chỉ gỡ liên kết khỏi lần cập nhật này, không xóa file trên Drive.</div>' +
+      "</div>";
+
+
+
+
+    openModal("Sửa cập nhật tiến độ", bodyHtml, "Lưu", function () {
+      const trangThai = document.getElementById("modalTrangThai").value.trim();
+      const noiDung = document.getElementById("modalNoiDung").value.trim();
+
+
+
+
+      if (!trangThai || !noiDung) {
+        alert("Vui lòng nhập đầy đủ thông tin.");
+        return;
+      }
+      if (modalKeepFileUrls.length + modalNewFiles.length > 5) {
+        alert("Chỉ được tối đa 5 file minh chứng.");
+        return;
+      }
+
+
+
+
+      const confirmBtn = document.getElementById("modalConfirmBtn");
+      confirmBtn.disabled = true;
+      confirmBtn.innerText = "Đang lưu...";
+
+
+
+
+      readFilesAsBase64(modalNewFiles)
+        .then(function (fileDataList) {
+          google.script.run
+            .withSuccessHandler(function (result) {
+              confirmBtn.disabled = false;
+              confirmBtn.innerText = "Lưu";
+              if (!result.success) {
+                alert(result.message);
+                return;
+              }
+              closeModal();
+              loadProgressHistory(madean);
+            })
+            .withFailureHandler(function (error) {
+              confirmBtn.disabled = false;
+              confirmBtn.innerText = "Lưu";
+              if (isSessionExpiredError(error)) { closeModal(); showSessionExpiredModal(); return; }
+              alert("Có lỗi xảy ra: " + error.message);
+            })
+            .updateProgressRow(token(), id, {
+              trangThai: trangThai,
+              noiDung: noiDung,
+              keepFileUrls: modalKeepFileUrls,
+              files: fileDataList
+            });
+        })
+        .catch(function () {
+          confirmBtn.disabled = false;
+          confirmBtn.innerText = "Lưu";
+          alert("Không thể đọc file minh chứng mới.");
+        });
+    });
+
+
+
+
+    renderModalExistingFiles();
+    renderModalNewFileList();
+
+
+
+
+    if (modalKeepFileUrls.length > 0) {
+      google.script.run
+        .withSuccessHandler(function (list) {
+          (list || []).forEach(function (item) {
+            if (item && item.name) modalFileNameByUrl[item.url] = item.name;
+          });
+          renderModalExistingFiles();
+        })
+        .withFailureHandler(function () {})
+        .getFileNamesForUrls(token(), modalKeepFileUrls);
+    }
+  }
+
+
+
+
+  function deleteHistoryRow(id, madean) {
+    openModal(
+      "Xóa dòng cập nhật",
+      "<p>Bạn có chắc chắn muốn xóa dòng cập nhật này? Hành động này không thể hoàn tác.</p>",
+      "Xóa",
+      function () {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            if (!result.success) { alert(result.message); return; }
+            closeModal();
+            loadProgressHistory(madean);
+          })
+          .withFailureHandler(function (error) {
+            if (isSessionExpiredError(error)) { closeModal(); showSessionExpiredModal(); return; }
+            alert("Có lỗi xảy ra: " + error.message);
+          })
+          .deleteProgressRow(token(), id);
+      },
+      true
+    );
+  }
+
+
+
+
+  function submitProgress() {
+    const maDeAn = document.getElementById("pMaDeAn").value.trim();
+    const khoaPhong = document.getElementById("pKhoaPhong").value.trim();
+    const tenSelect = document.getElementById("pTenDeAn");
+    const tenDeAn = tenSelect.selectedIndex >= 0 ? tenSelect.options[tenSelect.selectedIndex].text.trim() : "";
+    const trangThai = document.getElementById("pTrangThai").value.trim();
+    const noiDung = document.getElementById("pNoiDung").value.trim();
+    const files = selectedFiles;
+    const chiSoUpdates = collectChiSoUpdates();
+
+
+
+
+    const msg = document.getElementById("progressMessage");
+    msg.innerHTML = "";
+
+
+
+
+    if (!maDeAn) return showProgressMsg("Vui lòng chọn đề án/sáng kiến.", false);
+    if (!khoaPhong) return showProgressMsg("Vui lòng chọn khoa/phòng.", false);
+    if (!tenDeAn) return showProgressMsg("Vui lòng chọn tên đề án/sáng kiến.", false);
+    if (!trangThai) return showProgressMsg("Vui lòng chọn trạng thái.", false);
+    if (!noiDung) return showProgressMsg("Vui lòng nhập nội dung công việc.", false);
+    if (files.length > 5) return showProgressMsg("Chỉ được đính kèm tối đa 5 file.", false);
+
+
+
+
+    const btn = document.getElementById("pUpdateBtn");
+    btn.disabled = true;
+    btn.innerText = "Đang cập nhật...";
+
+
+
+
+    readFilesAsBase64(files)
+      .then(function (fileDataList) {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            btn.disabled = false;
+            btn.innerText = "Cập nhật";
+            if (!result || !result.success) {
+              showProgressMsg((result && result.message) || "Không thể cập nhật.", false);
+              return;
+            }
+            showProgressMsg("Đã cập nhật thành công.", true);
+            document.getElementById("pTrangThai").value = "";
+            document.getElementById("pNoiDung").value = "";
+            selectedFiles = [];
+            renderFileList();
+            if (progressChiSoList.length > 0) renderChiSoSection(progressChiSoList);
+            loadProgressHistory(maDeAn);
+          })
+          .withFailureHandler(function (error) {
+            btn.disabled = false;
+            btn.innerText = "Cập nhật";
+            if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+            showProgressMsg("Có lỗi xảy ra: " + error.message, false);
+          })
+          .saveProgress(token(), {
+            maDeAn: maDeAn, khoaPhong: khoaPhong, tenDeAn: tenDeAn,
+            trangThai: trangThai, noiDung: noiDung, files: fileDataList,
+            chiSoUpdates: chiSoUpdates
+          });
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.innerText = "Cập nhật";
+        showProgressMsg("Không thể đọc file minh chứng.", false);
+      });
+  }
+
+
+
+
+  function readFilesAsBase64(files) {
+    const readers = files.map(function (file) {
+      return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          resolve({ name: file.name, mimeType: file.type, data: e.target.result.split(",")[1] });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    });
+    return Promise.all(readers);
+  }
+
+
+
+
+  function showProgressMsg(text, success) {
+    const msg = document.getElementById("progressMessage");
+    msg.innerHTML = '<span class="' + (success ? "success" : "error") + '">' + escapeHtml(text) + '</span>';
+  }
+
+
+
+
+  // ==========================================================
+  // TRANG BAO CAO
+  // ==========================================================
+  function initReportScreen() {
+    currentReportTab = null;
+    document.querySelectorAll(".report-tab-btn").forEach(function (b) { b.classList.remove("active"); });
+
+
+
+
+    const panel = document.getElementById("reportPanel");
+    const vaiTro = session && String(session.vaiTro).trim();
+    if (!session || (vaiTro !== "Admin" && vaiTro !== "TVHĐ")) {
+      panel.innerHTML = '<div class="empty">Không có quyền truy cập.</div>';
+      return;
+    }
+    panel.innerHTML = '<div class="empty">Vui lòng chọn loại báo cáo phía trên.</div>';
+  }
+
+
+
+
+  function selectReportTab(key) {
+    currentReportTab = key;
+    document.querySelectorAll(".report-tab-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-report") === key);
+    });
+
+
+
+
+    const panel = document.getElementById("reportPanel");
+
+
+
+
+    if (key === "1") {
+      panel.innerHTML = '<div class="empty">Đang tải...</div>';
+      google.script.run
+        .withSuccessHandler(function (stats) { renderReportDeAnStats(stats); })
+        .withFailureHandler(function (error) {
+          if (isSessionExpiredError(error)) { panel.innerHTML = ""; showSessionExpiredModal(); return; }
+          panel.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+        })
+        .getReportDeAnStats(token());
+      return;
+    }
+
+
+
+
+    panel.innerHTML = '<div class="empty">Sẽ xây dựng sau.</div>';
+  }
+
+
+
+
+  function renderReportDeAnStats(stats) {
+    lastReportStats = stats;
+    const panel = document.getElementById("reportPanel");
+    if (!stats) { panel.innerHTML = '<div class="empty">Chưa có dữ liệu.</div>'; return; }
+
+
+
+
+    let cardsHtml = '<div class="report-summary">';
+    stats.items.forEach(function (item) {
+      cardsHtml += '<div class="report-stat-card"><div class="num">' + item.count + ' (' + item.percent + '%)</div><div class="lbl">' + escapeHtml(item.label) + '</div></div>';
+    });
+    cardsHtml += '</div>';
+
+
+
+
+    const tableHtml =
+      '<div class="table-wrapper"><table class="report-table"><thead><tr><th>Nhóm</th><th>Số lượng</th><th>Tỷ lệ %</th></tr></thead><tbody>' +
+      stats.items.map(function (item) {
+        return '<tr><td>' + escapeHtml(item.label) + '</td><td>' + item.count + '</td><td>' + item.percent + '%</td></tr>';
+      }).join('') +
+      '<tr><th>Tổng cộng</th><th>' + stats.total + '</th><th>100%</th></tr>' +
+      '</tbody></table></div>';
+
+
+
+
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+    panel.innerHTML =
+      cardsHtml +
+      buildPieChartHtml(stats) +
+      tableHtml +
+      (isAdminAcc ? '<button type="button" class="secondary-btn export-btn" onclick="exportReportDeAnStats()">Xuất file</button>' : '');
+  }
+
+
+
+
+  const REPORT_CHART_COLORS = ["#0B4F8C", "#2A95BF", "#73C6D9", "#adb5bd"];
+
+
+
+
+  function buildPieChartHtml(stats) {
+    let cumulative = 0;
+    const stops = stats.items.map(function (item, i) {
+      const start = cumulative;
+      cumulative += item.percent;
+      const color = REPORT_CHART_COLORS[i % REPORT_CHART_COLORS.length];
+      return color + " " + start + "% " + cumulative + "%";
+    }).join(", ");
+
+
+
+
+    const legend = stats.items.map(function (item, i) {
+      const color = REPORT_CHART_COLORS[i % REPORT_CHART_COLORS.length];
+      return '<div class="pie-legend-item"><span class="pie-dot" style="background:' + color + ';"></span>' +
+        escapeHtml(item.label) + ' — ' + item.count + ' (' + item.percent + '%)</div>';
+    }).join('');
+
+
+
+
+    return '<div class="report-chart-wrap">' +
+      '<div class="pie-chart" style="background: conic-gradient(' + stops + ');"></div>' +
+      '<div class="pie-legend">' + legend + '</div>' +
+    '</div>';
+  }
+
+
+
+
+  function exportReportDeAnStats() {
+    if (!lastReportStats) return;
+
+
+
+
+    let tableHtml = '<table border="1"><thead><tr><th>Nhóm</th><th>Số lượng</th><th>Tỷ lệ %</th></tr></thead><tbody>';
+    lastReportStats.items.forEach(function (item) {
+      tableHtml += '<tr><td>' + escapeHtml(item.label) + '</td><td>' + item.count + '</td><td>' + item.percent + '%</td></tr>';
+    });
+    tableHtml += '<tr><td><b>Tổng cộng</b></td><td><b>' + lastReportStats.total + '</b></td><td><b>100%</b></td></tr>';
+    tableHtml += '</tbody></table>';
+
+
+
+
+    const fullHtml =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
+      '<head><meta charset="UTF-8"></head><body>' + tableHtml + '</body></html>';
+
+
+
+
+    const blob = new Blob(["\uFEFF" + fullHtml], { type: "application/vnd.ms-excel" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "BaoCao_SoLuongDeAnSangKien.xls";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+
+
+
+  // ==========================================================
+  // TRANG DANG KY
+  // ==========================================================
+  function initDangKyScreen() {
+    document.getElementById("dangkyYear").innerText = new Date().getFullYear();
+    document.getElementById("dkHoTen").value = "";
+    document.getElementById("dkEmail").value = "";
+    document.getElementById("dkSoDienThoai").value = "";
+    dangkySelectedLoai = "";
+    dangkySelectedFiles = [];
+    document.getElementById("dangkySectionFields").innerHTML = "";
+    document.getElementById("dangkySubmitBtn").style.display = "none";
+    document.getElementById("dangkyMessage").innerHTML = "";
+    document.getElementById("dangkyHistoryDetail").innerHTML = "";
+    document.getElementById("dangkyDetailPanel").classList.remove("open");
+    dangkyHistorySelectedId = null;
+    dangkyHistoryEditing = false;
+
+
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+    document.getElementById("dangkyAdminToggles").style.display = isAdminAcc ? "block" : "none";
+    document.getElementById("dangkyHistoryFilterBox").style.display = isAdminAcc ? "block" : "none";
+    document.getElementById("dangkyHistoryKhoaFilter").innerHTML = '<option value="">Tất cả khoa/phòng</option>';
+
+
+    initDeadlineBanner("dangkyDeadlineBanner");
+
+
+    loadDangKyFieldDefs(function () {
+      loadDangKyStatus();
+    });
+
+
+    loadDangKyTemplateLinks();
+    loadDangKyHistory();
+  }
+
+
+
+
+  function loadDangKyFieldDefs(callback) {
+    if (dangkyFieldDefs) { callback(); return; }
+    google.script.run
+      .withSuccessHandler(function (defs) { dangkyFieldDefs = defs; callback(); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được cấu hình form đăng ký"); })
+      .getDangKyFieldDefs(token());
+  }
+
+
+
+
+  function loadDangKyStatus() {
+    google.script.run
+      .withSuccessHandler(function (status) {
+        dangkyStatus = status;
+        renderDangKyLoaiOptions();
+        if (session && String(session.vaiTro).trim() === "Admin") renderDangKyAdminToggles();
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được trạng thái nhận đăng ký"); })
+      .getDangKyStatus(token());
+  }
+
+
+
+
+  function renderDangKyLoaiOptions() {
+    const box = document.getElementById("dangkyLoaiOptions");
+    box.innerHTML = "";
+    dangkyFieldDefs.loaiOrder.forEach(function (loai) {
+      const isOpen = !!(dangkyStatus && dangkyStatus[loai]);
+      const label = dangkyFieldDefs.loaiLabels[loai] || loai;
+      const wrap = document.createElement("label");
+      wrap.className = "dangky-radio-option" + (isOpen ? "" : " disabled");
+      wrap.innerHTML =
+        '<input type="radio" name="dangkyLoai" value="' + loai + '"' + (isOpen ? "" : " disabled") +
+          (dangkySelectedLoai === loai ? " checked" : "") + ' onchange="selectDangKyLoai(\'' + loai + '\')">' +
+        '<span class="opt-label">' + escapeHtml(label) + '</span>' +
+        (isOpen ? '' : '<span class="dangky-radio-note">Tạm ngừng nhận đăng ký</span>');
+      box.appendChild(wrap);
+    });
+  }
+
+
+
+
+  function renderDangKyAdminToggles() {
+    const box = document.getElementById("dangkyToggleList");
+    box.innerHTML = "";
+    dangkyFieldDefs.loaiOrder.forEach(function (loai) {
+      const isOpen = !!(dangkyStatus && dangkyStatus[loai]);
+      const label = dangkyFieldDefs.loaiLabels[loai] || loai;
+      const row = document.createElement("div");
+      row.className = "dangky-toggle-row";
+      row.innerHTML =
+        '<span class="lbl">' + escapeHtml(label) + '</span>' +
+        '<label class="toggle-switch">' +
+          '<input type="checkbox" ' + (isOpen ? "checked" : "") + ' onchange="toggleDangKyStatus(\'' + loai + '\', this.checked)">' +
+          '<span class="toggle-slider"></span>' +
+        '</label>';
+      box.appendChild(row);
+    });
+  }
+
+
+
+
+  function toggleDangKyStatus(loai, checked) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) {
+          alert(result.message);
+          loadDangKyStatus();
+          return;
+        }
+        dangkyStatus = result.status;
+        renderDangKyLoaiOptions();
+        if (dangkySelectedLoai && !dangkyStatus[dangkySelectedLoai]) {
+          dangkySelectedLoai = "";
+          document.getElementById("dangkySectionFields").innerHTML = "";
+          document.getElementById("dangkySubmitBtn").style.display = "none";
+        }
+      })
+      .withFailureHandler(function (error) {
+        handleServerError(error, "Không thể cập nhật trạng thái");
+        loadDangKyStatus();
+      })
+      .setDangKyStatus(token(), loai, checked);
+  }
+
+
+
+
+  function selectDangKyLoai(loai) {
+    dangkySelectedLoai = loai;
+    dangkySelectedFiles = [];
+    dangkyKhoaSelections = {};
+    renderDangKySectionFields(loai, null);
+    document.getElementById("dangkySubmitBtn").style.display = "block";
+  }
+
+
+
+
+  const DANGKY_SECTION_TITLES = {
+    DA_MOI: "I. ĐĂNG KÝ ĐỀ ÁN MỚI",
+    DA_CU: "II. ĐỀ ÁN CŨ ĐANG TRONG QUÁ TRÌNH THỰC HIỆN",
+    SK: "III. ĐĂNG KÝ SÁNG KIẾN CẢI TIẾN"
+  };
+
+
+
+
+  function renderDangKySectionFields(loai, prefill) {
+    const fields = dangkyFieldDefs.fields[loai] || [];
+    const box = document.getElementById("dangkySectionFields");
+    let html = '<h3 class="dangky-section-title">' + escapeHtml(DANGKY_SECTION_TITLES[loai] || "") + '</h3>';
+    fields.forEach(function (field) { html += renderDangKyField(field, prefill); });
+    box.innerHTML = html;
+
+
+
+
+    loadDangKyKhoaOptions(function (list) {
+      const khoaField = fields.find(function (f) { return f.type === "khoa"; });
+      if (!khoaField) return;
+      const picker = document.getElementById("dkField_" + khoaField.key + "_picker");
+      if (!picker) return;
+      list.forEach(function (k) {
+        const opt = document.createElement("option");
+        opt.value = k; opt.textContent = k;
+        picker.appendChild(opt);
+      });
+      dangkyKhoaSelections[khoaField.key] = String((prefill && prefill[khoaField.key]) || "")
+        .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+      renderDangKyKhoaChips(khoaField.key);
+    });
+  }
+
+
+
+
+  let dangkyKhoaSelections = {};
+
+
+
+
+  function addDangKyKhoaSelection(fieldKey, selectEl) {
+    const val = selectEl.value;
+    selectEl.value = "";
+    if (!val) return;
+    if (!dangkyKhoaSelections[fieldKey]) dangkyKhoaSelections[fieldKey] = [];
+    if (dangkyKhoaSelections[fieldKey].indexOf(val) === -1) {
+      dangkyKhoaSelections[fieldKey].push(val);
+    }
+    renderDangKyKhoaChips(fieldKey);
+  }
+
+
+
+
+  function removeDangKyKhoaSelection(fieldKey, val) {
+    dangkyKhoaSelections[fieldKey] = (dangkyKhoaSelections[fieldKey] || []).filter(function (v) { return v !== val; });
+    renderDangKyKhoaChips(fieldKey);
+  }
+
+
+
+
+  function renderDangKyKhoaChips(fieldKey) {
+    const box = document.getElementById("dkField_" + fieldKey + "_chips");
+    if (!box) return;
+    const list = dangkyKhoaSelections[fieldKey] || [];
+    if (list.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    list.forEach(function (k) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(k) + '</span>' +
+        '<span class="file-remove" onclick="removeDangKyKhoaSelection(\'' + fieldKey + '\', \'' + escapeAttr(k) + '\')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+
+
+
+  function renderDangKyField(field, prefill) {
+    const value = (prefill && prefill[field.key]) || "";
+    const inputId = "dkField_" + field.key;
+    const labelHtml = escapeHtml(field.label) + (field.required ? ' <span class="required">*</span>' : '');
+
+
+
+
+    if (field.type === "khoa") {
+      return '<div class="form-group" data-field-key="' + field.key + '"><label>' + labelHtml + '</label>' +
+        '<select id="' + inputId + '_picker" onchange="addDangKyKhoaSelection(\'' + field.key + '\', this)">' +
+          '<option value="">-- Chọn khoa/phòng --</option>' +
+        '</select>' +
+        '<div id="' + inputId + '_chips" class="file-chip-list"></div>' +
+        '<div class="file-hint">Có thể lựa chọn nhiều khoa/phòng</div></div>';
+    }
+    if (field.type === "textarea") {
+      return '<div class="form-group"><label>' + labelHtml + '</label>' +
+        '<textarea id="' + inputId + '">' + escapeHtml(value) + '</textarea></div>';
+    }
+    if (field.type === "checkbox") {
+      const selected = String(value).split(",").map(function (s) { return s.trim(); });
+      const opts = (field.options || []).map(function (opt) {
+        const checked = selected.indexOf(opt) !== -1 ? "checked" : "";
+        return '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:18px;font-weight:normal;">' +
+          '<input type="checkbox" value="' + escapeAttr(opt) + '" ' + checked + '> ' + escapeHtml(opt) + '</label>';
+      }).join("");
+      return '<div class="form-group" data-field-key="' + field.key + '"><label>' + labelHtml + '</label><div>' + opts + '</div></div>';
+    }
+    if (field.type === "select") {
+      const opts = (field.options || []).map(function (opt) {
+        const selected = value === opt ? "selected" : "";
+        return '<option value="' + escapeAttr(opt) + '" ' + selected + '>' + escapeHtml(opt) + '</option>';
+      }).join("");
+      return '<div class="form-group"><label>' + labelHtml + '</label>' +
+        '<select id="' + inputId + '"><option value="">-- Chọn --</option>' + opts + '</select></div>';
+    }
+    if (field.type === "radio_other") {
+      const opts = field.options || [];
+      const isOtherSelected = !!value && opts.indexOf(value) === -1;
+      const otherId = inputId + "_other";
+      let optsHtml = opts.map(function (opt) {
+        const checked = value === opt ? "checked" : "";
+        return '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:normal;">' +
+          '<input type="radio" class="dangky-square-radio" name="' + inputId + '" value="' + escapeAttr(opt) + '" ' + checked +
+          ' onchange="toggleDangKyOtherInput(\'' + otherId + '\', false)"> ' + escapeHtml(opt) + '</label>';
+      }).join("");
+      optsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-weight:normal;">' +
+        '<input type="radio" class="dangky-square-radio" name="' + inputId + '" value="__other__" ' + (isOtherSelected ? "checked" : "") +
+        ' onchange="toggleDangKyOtherInput(\'' + otherId + '\', true)"> Khác</label>' +
+        '<input type="text" id="' + otherId + '" placeholder="Nhập nội dung khác" value="' + escapeAttr(isOtherSelected ? value : "") +
+        '" style="margin-top:6px;display:' + (isOtherSelected ? "block" : "none") + ';">';
+      return '<div class="form-group"><label>' + labelHtml + '</label>' + optsHtml + '</div>';
+    }
+    if (field.type === "month") {
+      return '<div class="form-group"><label>' + labelHtml + '</label>' +
+        '<input type="text" id="' + inputId + '" placeholder="mm/yyyy" maxlength="7" inputmode="numeric" value="' + escapeAttr(value) + '" oninput="formatDangKyMonthInput(this)"></div>';
+    }
+    if (field.type === "month_range") {
+      const parts = String(value || "").split("-").map(function (s) { return s.trim(); });
+      const fromVal = parts[0] || "";
+      const toVal = parts[1] || "";
+      return '<div class="form-group"><label>' + labelHtml + '</label>' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<input type="text" id="' + inputId + '_from" placeholder="mm/yyyy" maxlength="7" inputmode="numeric" style="flex:1;" value="' + escapeAttr(fromVal) + '" oninput="formatDangKyMonthInput(this)">' +
+        '<span>-</span>' +
+        '<input type="text" id="' + inputId + '_to" placeholder="mm/yyyy" maxlength="7" inputmode="numeric" style="flex:1;" value="' + escapeAttr(toVal) + '" oninput="formatDangKyMonthInput(this)">' +
+        '</div><div class="file-hint">Ví dụ: 01/2000 - 12/2000</div></div>';
+    }
+    if (field.type === "currency") {
+      return '<div class="form-group"><label>' + labelHtml + '</label>' +
+        '<input type="text" id="' + inputId + '" placeholder="' + escapeAttr(field.placeholder || "") + '" inputmode="numeric" value="' + escapeAttr(value) + '" oninput="formatDangKyCurrencyInput(this)"></div>';
+    }
+    if (field.type === "file") {
+      const hintHtml = field.hint ? '<div class="file-hint">' + escapeHtml(field.hint).replace(/\n/g, "<br>") + '</div>' : "";
+      return '<div class="form-group"><label>' + labelHtml + '</label>' + hintHtml +
+        '<input type="file" id="dangkySelectedFilePicker" accept=".pdf,application/pdf" style="display:none" onchange="handleDangKyFileSelect(event)">' +
+        '<button type="button" class="secondary-btn" onclick="document.getElementById(\'dangkySelectedFilePicker\').click()">+ Chọn file</button>' +
+        '<div id="dangkySelectedFileList" class="file-chip-list"></div>' +
+        '<div class="file-note">Không bắt buộc. Tối đa 1 file, định dạng PDF.</div></div>';
+    }
+    return '<div class="form-group"><label>' + labelHtml + '</label>' +
+      '<input type="text" id="' + inputId + '" placeholder="' + escapeAttr(field.placeholder || "") + '" value="' + escapeAttr(value) + '"></div>';
+  }
+
+
+
+
+  function formatDangKyMonthInput(el) {
+    const digits = el.value.replace(/\D/g, "").slice(0, 6);
+    el.value = digits.length > 2 ? digits.slice(0, 2) + "/" + digits.slice(2) : digits;
+  }
+
+
+
+
+  function formatDangKyCurrencyInput(el) {
+    const digits = el.value.replace(/\D/g, "");
+    el.value = digits ? Number(digits).toLocaleString("vi-VN") : "";
+  }
+
+
+
+
+  function isPdfFileClient_(file) {
+    const name = (file.name || "").toLowerCase();
+    return file.type === "application/pdf" || name.slice(-4) === ".pdf";
+  }
+
+
+
+
+  function handleDangKyFileSelect(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (picked.length === 0) return;
+    const f = picked[0];
+    if (!isPdfFileClient_(f)) {
+      alert("Chỉ được đính kèm file định dạng PDF (.pdf).");
+      return;
+    }
+    dangkySelectedFiles = [f];
+    renderDangKySelectedFileList();
+  }
+
+
+
+
+  function renderDangKySelectedFileList() {
+    const box = document.getElementById("dangkySelectedFileList");
+    if (!box) return;
+    if (dangkySelectedFiles.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    dangkySelectedFiles.forEach(function (f, i) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-remove" title="Bỏ file này" onclick="removeDangKySelectedFile(' + i + ')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+
+
+
+  function removeDangKySelectedFile(i) {
+    dangkySelectedFiles.splice(i, 1);
+    renderDangKySelectedFileList();
+  }
+
+
+
+
+  function toggleDangKyOtherInput(otherId, show) {
+    const el = document.getElementById(otherId);
+    if (el) el.style.display = show ? "block" : "none";
+  }
+
+
+
+
+  function collectDangKyFieldValue(field) {
+    if (field.type === "khoa") {
+      return (dangkyKhoaSelections[field.key] || []).join(", ");
+    }
+    if (field.type === "checkbox") {
+      const container = document.querySelector('[data-field-key="' + field.key + '"]');
+      if (!container) return "";
+      const checked = Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(function (el) { return el.value; });
+      return checked.join(", ");
+    }
+    if (field.type === "radio_other") {
+      const inputId = "dkField_" + field.key;
+      const checkedEl = document.querySelector('input[name="' + inputId + '"]:checked');
+      if (!checkedEl) return "";
+      if (checkedEl.value === "__other__") {
+        const otherEl = document.getElementById(inputId + "_other");
+        return otherEl ? otherEl.value.trim() : "";
+      }
+      return checkedEl.value;
+    }
+    if (field.type === "month_range") {
+      const fromEl = document.getElementById("dkField_" + field.key + "_from");
+      const toEl = document.getElementById("dkField_" + field.key + "_to");
+      const from = fromEl ? fromEl.value.trim() : "";
+      const to = toEl ? toEl.value.trim() : "";
+      if (!from && !to) return "";
+      return from + " - " + to;
+    }
+    const el = document.getElementById("dkField_" + field.key);
+    return el ? el.value.trim() : "";
+  }
+
+
+
+
+  function loadDangKyKhoaOptions(callback) {
+    if (dangkyKhoaOptionsCache) { callback(dangkyKhoaOptionsCache); return; }
+    google.script.run
+      .withSuccessHandler(function (list) { dangkyKhoaOptionsCache = list; callback(list); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách khoa/phòng"); })
+      .getKhoaPhongMasterList(token());
+  }
+
+
+
+
+  function findMissingRequiredDangKyField(fields, values) {
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
+      if (f.required && !values[f.key]) return f.label;
+    }
+    return null;
+  }
+
+
+
+
+  function submitDangKyForm() {
+    document.getElementById("dangkyMessage").innerHTML = "";
+
+
+
+
+    if (!dangkySelectedLoai) return showDangKyMsg("Vui lòng chọn mục 4 - loại đăng ký.", false);
+    const fields = dangkyFieldDefs.fields[dangkySelectedLoai] || [];
+
+
+
+
+    const data = {
+      HoTen: document.getElementById("dkHoTen").value.trim(),
+      Email: document.getElementById("dkEmail").value.trim(),
+      SoDienThoai: document.getElementById("dkSoDienThoai").value.trim()
+    };
+    fields.forEach(function (field) { data[field.key] = collectDangKyFieldValue(field); });
+
+
+
+
+    const missingContact = findMissingRequiredDangKyField(dangkyFieldDefs.contactFields, data);
+    if (missingContact) return showDangKyMsg('Vui lòng nhập "' + missingContact + '".', false);
+
+
+
+
+    const missingField = findMissingRequiredDangKyField(fields, data);
+    if (missingField) return showDangKyMsg('Vui lòng điền "' + missingField + '".', false);
+
+
+
+
+    const fileField = fields.find(function (f) { return f.type === "file"; });
+    const btn = document.getElementById("dangkySubmitBtn");
+    btn.disabled = true;
+    btn.innerText = "Đang nộp...";
+
+
+
+
+    (fileField ? readFilesAsBase64(dangkySelectedFiles) : Promise.resolve([]))
+      .then(function (fileDataList) {
+        if (fileField) data[fileField.key] = fileDataList;
+
+
+
+
+        google.script.run
+          .withSuccessHandler(function (result) {
+            btn.disabled = false;
+            btn.innerText = "Nộp phiếu đăng ký";
+            if (!result || !result.success) {
+              showDangKyMsg((result && result.message) || "Không thể nộp phiếu.", false);
+              return;
+            }
+            showDangKyMsg(result.message || "Đã nộp phiếu đăng ký thành công.", true);
+            document.getElementById("dangkySectionFields").innerHTML = "";
+            document.getElementById("dangkySubmitBtn").style.display = "none";
+            document.querySelectorAll('input[name="dangkyLoai"]').forEach(function (el) { el.checked = false; });
+            dangkySelectedLoai = "";
+            dangkySelectedFiles = [];
+            loadDangKyHistory();
+          })
+          .withFailureHandler(function (error) {
+            btn.disabled = false;
+            btn.innerText = "Nộp phiếu đăng ký";
+            if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+            showDangKyMsg("Có lỗi xảy ra: " + error.message, false);
+          })
+          .submitDangKy(token(), dangkySelectedLoai, data);
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.innerText = "Nộp phiếu đăng ký";
+        showDangKyMsg("Không thể đọc file đính kèm.", false);
+      });
+  }
+
+
+
+
+  function showDangKyMsg(text, success) {
+    document.getElementById("dangkyMessage").innerHTML = '<span class="' + (success ? "success" : "error") + '">' + escapeHtml(text) + '</span>';
+  }
+
+
+
+
+  function loadDangKyTemplateLinks() {
+    const box = document.getElementById("dangkyTemplateLinks");
+    box.innerHTML = '<div class="empty">Đang tải...</div>';
+    google.script.run
+      .withSuccessHandler(function (list) {
+        if (!list || list.length === 0) { box.innerHTML = '<div class="empty">Chưa có biểu mẫu.</div>'; return; }
+        let html = '<div class="dangky-link-list">';
+        list.forEach(function (item, i) {
+          html += '<a href="' + escapeAttr(item.url) + '" target="_blank" rel="noopener">' + (i + 1) + '. ' + escapeHtml(item.name) + '</a>';
+        });
+        html += '</div>';
+        box.innerHTML = html;
+      })
+      .withFailureHandler(function (error) {
+        box.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getDangKyTemplateLinks(token());
+  }
+
+
+
+
+  // ==========================================================
+  // LICH SU DANG KY
+  // ==========================================================
+  function loadDangKyHistory() {
+    const listBox = document.getElementById("dangkyHistoryList");
+    listBox.innerHTML = '<div class="empty">Đang tải...</div>';
+
+
+
+
+    google.script.run
+      .withSuccessHandler(function (data) {
+        dangkyHistoryData = data || [];
+        renderDangKyHistoryKhoaFilterOptions();
+        renderDangKyHistoryList();
+        if (dangkyHistorySelectedId) renderDangKyHistoryDetail();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { listBox.innerHTML = ""; showSessionExpiredModal(); return; }
+        listBox.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getDangKyHistory(token());
+  }
+
+
+
+
+  function renderDangKyHistoryKhoaFilterOptions() {
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+    if (!isAdminAcc) return;
+    const select = document.getElementById("dangkyHistoryKhoaFilter");
+    const currentValue = select.value;
+    const set = {};
+    dangkyHistoryData.forEach(function (item) {
+      String(item.khoaPhong || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (k) {
+        set[k.toLowerCase()] = k;
+      });
+    });
+    const list = Object.values(set).sort(function (a, b) { return a.localeCompare(b, "vi", { sensitivity: "base" }); });
+    select.innerHTML = '<option value="">Tất cả khoa/phòng</option>' +
+      list.map(function (k) { return '<option value="' + escapeAttr(k) + '"' + (k === currentValue ? " selected" : "") + '>' + escapeHtml(k) + '</option>'; }).join("");
+  }
+
+
+
+
+  function onDangKyHistoryFilterChange() {
+    dangkyHistorySelectedId = null;
+    renderDangKyHistoryList();
+    renderDangKyHistoryDetail();
+  }
+
+
+
+
+  function renderDangKyHistoryList() {
+    const listBox = document.getElementById("dangkyHistoryList");
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+
+    if (!dangkyHistoryData || dangkyHistoryData.length === 0) {
+      listBox.innerHTML = '<div class="empty">Chưa có phiếu đăng ký nào.</div>';
+      return;
+    }
+
+    let visibleData = dangkyHistoryData;
+    if (isAdminAcc) {
+      const filterVal = document.getElementById("dangkyHistoryKhoaFilter").value;
+      if (filterVal) {
+        visibleData = dangkyHistoryData.filter(function (item) {
+          return String(item.khoaPhong || "").split(",").map(function (s) { return s.trim(); }).indexOf(filterVal) !== -1;
+        });
+      }
+    }
+
+    if (visibleData.length === 0) {
+      listBox.innerHTML = '<div class="empty">Không có phiếu đăng ký nào thuộc khoa/phòng này.</div>';
+      return;
+    }
+
+    let html = "";
+    visibleData.forEach(function (item) {
+      const active = String(item.id) === String(dangkyHistorySelectedId) ? " active" : "";
+      html += '<span class="dangky-history-item-wrap">' +
+        '<button type="button" class="dangky-history-btn' + active + '" onclick="selectDangKyHistory(\'' + escapeAttr(item.id) + '\')">Phiếu đăng ký ' + item.index + '</button>';
+      if (isAdminAcc) {
+        html += '<button type="button" class="dangky-history-delete-btn" title="Xóa phiếu đăng ký này" onclick="confirmDeleteDangKyPhieu(\'' + escapeAttr(item.id) + '\', ' + item.index + ')">✕</button>';
+      }
+      html += '</span>';
+    });
+    listBox.innerHTML = html;
+  }
+
+  // Admin bam nut xoa: hien popup xac nhan truoc khi xoa THAT SU (khong the hoan tac)
+  // Noi dung popup RUT GON theo yeu cau, can DEU 2 ben (style text-align:justify).
+  function confirmDeleteDangKyPhieu(id, index) {
+    openModal(
+      "Xóa phiếu đăng ký",
+      '<p style="text-align:justify;">Bạn chắc chắn muốn xóa Phiếu đăng ký ' + index + '? Toàn bộ dữ liệu liên quan sẽ bị xóa vĩnh viễn và không thể khôi phục.</p>',
+      "Xóa",
+      function () {
+        const confirmBtn = document.getElementById("modalConfirmBtn");
+        confirmBtn.disabled = true;
+        confirmBtn.innerText = "Đang xóa...";
+
+        google.script.run
+          .withSuccessHandler(function (result) {
+            closeModal();
+            if (!result.success) { alert(result.message); return; }
+            // SUA LOI: sau khi xoa thanh cong, phai DONG NGAY khung chi tiet dang mo (neu dang
+            // xem dung phieu vua xoa) TRUOC khi tai lai danh sach - truoc day chi dat bien
+            // dangkyHistorySelectedId = null roi goi loadDangKyHistory(), nhung loadDangKyHistory
+            // CHI render lai chi tiet khi dangkyHistorySelectedId con gia tri, nen khung cu van
+            // con nguyen tren man hinh du du lieu da mat that su o Google Sheet.
+            if (dangkyHistorySelectedId === id) {
+              dangkyHistorySelectedId = null;
+              document.getElementById("dangkyHistoryDetail").innerHTML = "";
+              document.getElementById("dangkyDetailPanel").classList.remove("open");
+            }
+            loadDangKyHistory();
+          })
+          .withFailureHandler(function (error) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerText = "Xóa";
+            handleServerError(error, "Không xóa được phiếu đăng ký");
+          })
+          .deleteDangKyPhieu(token(), id);
+      },
+      true
+    );
+  }
+
+
+
+
+  function selectDangKyHistory(id) {
+    dangkyHistorySelectedId = (String(dangkyHistorySelectedId) === String(id)) ? null : id;
+    dangkyHistoryEditing = false;
+    renderDangKyHistoryList();
+    renderDangKyHistoryDetail();
+  }
+
+
+
+
+  function renderDangKyHistoryDetail() {
+    const box = document.getElementById("dangkyHistoryDetail");
+    const panel = document.getElementById("dangkyDetailPanel");
+    const item = dangkyHistoryData.find(function (r) { return String(r.id) === String(dangkyHistorySelectedId); });
+    if (!item) { box.innerHTML = ""; panel.classList.remove("open"); return; }
+    panel.classList.add("open");
+
+
+
+
+    let html = '<div class="dangky-detail-box"><h3 style="margin-top:0;color:var(--color-primary);">Phiếu đăng ký ' + item.index + ' — ' + escapeHtml(item.loaiLabel) + '</h3>';
+    html += '<table class="info-table">';
+
+
+
+
+    item.fields.forEach(function (field) {
+      if (!field.value && !dangkyHistoryEditing) return;
+
+
+
+
+      let cell;
+      if (dangkyHistoryEditing && !field.locked) {
+        const fieldId = "editDk_" + field.key;
+        if (field.type === "textarea") {
+          cell = '<textarea id="' + fieldId + '" style="min-height:80px;">' + escapeHtml(field.value) + '</textarea>';
+        } else if (field.type === "month") {
+          cell = '<input type="text" id="' + fieldId + '" placeholder="mm/yyyy" maxlength="7" inputmode="numeric" value="' + escapeAttr(field.value) + '" oninput="formatDangKyMonthInput(this)">';
+        } else if (field.type === "month_range") {
+          const parts = String(field.value || "").split("-").map(function (s) { return s.trim(); });
+          const fromVal = parts[0] || "";
+          const toVal = parts[1] || "";
+          cell = '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<input type="text" id="' + fieldId + '_from" placeholder="mm/yyyy" maxlength="7" inputmode="numeric" style="flex:1;" value="' + escapeAttr(fromVal) + '" oninput="formatDangKyMonthInput(this)">' +
+            '<span>-</span>' +
+            '<input type="text" id="' + fieldId + '_to" placeholder="mm/yyyy" maxlength="7" inputmode="numeric" style="flex:1;" value="' + escapeAttr(toVal) + '" oninput="formatDangKyMonthInput(this)">' +
+            '</div><div class="file-hint">Ví dụ: 01/2000 - 12/2000</div>';
+        } else if (field.type === "currency") {
+          cell = '<input type="text" id="' + fieldId + '" inputmode="numeric" value="' + escapeAttr(field.value) + '" oninput="formatDangKyCurrencyInput(this)">';
+        } else if (field.type === "select") {
+          const opts = (field.options || []).map(function (opt) {
+            const selected = field.value === opt ? "selected" : "";
+            return '<option value="' + escapeAttr(opt) + '" ' + selected + '>' + escapeHtml(opt) + '</option>';
+          }).join("");
+          cell = '<select id="' + fieldId + '"><option value="">-- Chọn --</option>' + opts + '</select>';
+        } else if (field.type === "checkbox") {
+          const selected = String(field.value).split(",").map(function (s) { return s.trim(); });
+          cell = (field.options || []).map(function (opt) {
+            const checked = selected.indexOf(opt) !== -1 ? "checked" : "";
+            return '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:18px;font-weight:normal;">' +
+              '<input type="checkbox" class="editDkCheckbox" data-group="' + fieldId + '" value="' + escapeAttr(opt) + '" ' + checked + '> ' + escapeHtml(opt) + '</label>';
+          }).join("");
+        } else if (field.type === "radio_other") {
+          const opts = field.options || [];
+          const isOtherSelected = !!field.value && opts.indexOf(field.value) === -1;
+          const otherId = fieldId + "_other";
+          let optsHtml = opts.map(function (opt) {
+            const checked = field.value === opt ? "checked" : "";
+            return '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:normal;">' +
+              '<input type="radio" class="dangky-square-radio" name="' + fieldId + '" value="' + escapeAttr(opt) + '" ' + checked +
+              ' onchange="toggleDangKyOtherInput(\'' + otherId + '\', false)"> ' + escapeHtml(opt) + '</label>';
+          }).join("");
+          optsHtml += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-weight:normal;">' +
+            '<input type="radio" class="dangky-square-radio" name="' + fieldId + '" value="__other__" ' + (isOtherSelected ? "checked" : "") +
+            ' onchange="toggleDangKyOtherInput(\'' + otherId + '\', true)"> Khác</label>' +
+            '<input type="text" id="' + otherId + '" placeholder="Nhập nội dung khác" value="' + escapeAttr(isOtherSelected ? field.value : "") +
+            '" style="margin-top:6px;display:' + (isOtherSelected ? "block" : "none") + ';">';
+          cell = optsHtml;
+        } else if (field.type === "file") {
+          dangkyEditKeepFileUrls = field.value ? field.value.split(",").map(function (u) { return u.trim(); }).filter(Boolean) : [];
+          dangkyEditNewFiles = [];
+          const hintHtml = field.hint ? '<div class="file-hint">' + escapeHtml(field.hint).replace(/\n/g, "<br>") + '</div>' : "";
+          cell = hintHtml + '<div id="dangkyEditExistingFiles"></div>' +
+            '<input type="file" id="dangkyEditFileInput" accept=".pdf,application/pdf" style="display:none" onchange="handleDangKyEditFileSelect(event)">' +
+            '<button type="button" class="secondary-btn" style="margin-top:8px;" onclick="document.getElementById(\'dangkyEditFileInput\').click()">+ Chọn file</button>' +
+            '<div id="dangkyEditNewFileList" class="file-chip-list"></div>' +
+            '<div class="file-note">Tối đa 1 file (hiện có + mới), định dạng PDF.</div>';
+        } else {
+          cell = '<input type="text" id="' + fieldId + '" value="' + escapeAttr(field.value) + '">';
+        }
+      } else {
+        cell = field.value
+          ? (field.type === "file" ? renderFileLinksCell(field.value) : nl2br(field.value))
+          : '<span style="color:#999;">(chưa có)</span>';
+        if (field.locked && dangkyHistoryEditing) cell += ' <span style="color:#999;font-size:12px;">(không thể sửa)</span>';
+      }
+      html += '<tr><th>' + escapeHtml(field.label) + (dangkyHistoryEditing && field.required && !field.locked ? ' <span class="required">*</span>' : '') + '</th><td>' + cell + '</td></tr>';
+    });
+
+
+
+
+    html += '</table>';
+
+
+
+
+    if (item.canEdit) {
+      if (dangkyHistoryEditing) {
+        html += '<div style="display:flex;gap:10px;margin-top:14px;">' +
+          '<button type="button" class="primary" style="width:auto;padding:10px 20px;" id="saveDangKyBtn" onclick="saveDangKyEdit()">Lưu</button>' +
+          '<button type="button" class="secondary-btn" onclick="cancelDangKyEdit()">Hủy</button>' +
+          '</div>';
+      } else {
+        html += '<button type="button" class="secondary-btn" style="margin-top:16px;" onclick="enterDangKyEditMode()">Chỉnh sửa</button>';
+      }
+    } else {
+      html += '<div class="file-note" style="margin-top:10px;">Không thể chỉnh sửa phiếu này (loại đăng ký hiện đang tạm ngừng nhận đăng ký, hoặc phiếu không thuộc khoa/phòng của bạn).</div>';
+    }
+
+
+
+
+    html += '</div>';
+    box.innerHTML = html;
+
+
+
+
+    if (dangkyHistoryEditing) {
+      const fileField = item.fields.find(function (f) { return f.type === "file"; });
+      if (fileField) {
+        renderDangkyEditExistingFiles();
+        renderDangkyEditNewFileList();
+        if (dangkyEditKeepFileUrls.length > 0) {
+          google.script.run
+            .withSuccessHandler(function (list) {
+              dangkyEditFileNameByUrl = {};
+              (list || []).forEach(function (f) { if (f && f.name) dangkyEditFileNameByUrl[f.url] = f.name; });
+              renderDangkyEditExistingFiles();
+            })
+            .withFailureHandler(function () {})
+            .getFileNamesForUrls(token(), dangkyEditKeepFileUrls);
+        }
+      }
+    }
+  }
+
+
+
+
+  function renderDangkyEditExistingFiles() {
+    const box = document.getElementById("dangkyEditExistingFiles");
+    if (!box) return;
+    if (dangkyEditKeepFileUrls.length === 0) {
+      box.innerHTML = '<div class="empty" style="padding:6px 0;">Không có file nào.</div>';
+      return;
+    }
+    let html = '<div class="file-chip-list">';
+    dangkyEditKeepFileUrls.forEach(function (url, i) {
+      const label = dangkyEditFileNameByUrl[url] || ("File " + (i + 1));
+      html += '<div class="file-chip">' +
+        '<a class="file-name" href="' + escapeAttr(url) + '" target="_blank" title="' + escapeAttr(url) + '">' + escapeHtml(label) + '</a>' +
+        '<span class="file-remove" title="Bỏ file này" onclick="removeDangkyEditExistingFile(' + i + ')">✕</span></div>';
+    });
+    html += '</div>';
+    box.innerHTML = html;
+  }
+
+
+
+
+  function removeDangkyEditExistingFile(i) {
+    dangkyEditKeepFileUrls.splice(i, 1);
+    renderDangkyEditExistingFiles();
+  }
+
+
+
+
+  function handleDangKyEditFileSelect(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (picked.length === 0) return;
+    const f = picked[0];
+    if (!isPdfFileClient_(f)) {
+      alert("Chỉ được đính kèm file định dạng PDF (.pdf).");
+      return;
+    }
+    if (dangkyEditKeepFileUrls.length >= 1) dangkyEditKeepFileUrls = [];
+    dangkyEditNewFiles = [f];
+    renderDangkyEditExistingFiles();
+    renderDangkyEditNewFileList();
+  }
+
+
+
+
+  function renderDangkyEditNewFileList() {
+    const box = document.getElementById("dangkyEditNewFileList");
+    if (!box) return;
+    if (dangkyEditNewFiles.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    dangkyEditNewFiles.forEach(function (f, i) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-remove" title="Bỏ file này" onclick="removeDangkyEditNewFile(' + i + ')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+
+
+
+  function removeDangkyEditNewFile(i) {
+    dangkyEditNewFiles.splice(i, 1);
+    renderDangkyEditNewFileList();
+  }
+
+
+
+
+  function enterDangKyEditMode() {
+    dangkyHistoryEditing = true;
+    renderDangKyHistoryDetail();
+  }
+
+
+
+
+  function cancelDangKyEdit() {
+    dangkyHistoryEditing = false;
+    renderDangKyHistoryDetail();
+  }
+
+
+
+
+  function saveDangKyEdit() {
+    const item = dangkyHistoryData.find(function (r) { return String(r.id) === String(dangkyHistorySelectedId); });
+    if (!item) return;
+
+
+
+
+    const updates = {};
+    let fileField = null;
+    item.fields.forEach(function (field) {
+      if (field.locked) return;
+      if (field.type === "file") { fileField = field; return; }
+      const fieldId = "editDk_" + field.key;
+      if (field.type === "checkbox") {
+        const checked = Array.from(document.querySelectorAll('.editDkCheckbox[data-group="' + fieldId + '"]:checked')).map(function (el) { return el.value; });
+        updates[field.key] = checked.join(", ");
+      } else if (field.type === "radio_other") {
+        const checkedEl = document.querySelector('input[name="' + fieldId + '"]:checked');
+        if (!checkedEl) { updates[field.key] = ""; }
+        else if (checkedEl.value === "__other__") {
+          const otherEl = document.getElementById(fieldId + "_other");
+          updates[field.key] = otherEl ? otherEl.value.trim() : "";
+        } else {
+          updates[field.key] = checkedEl.value;
+        }
+      } else if (field.type === "month_range") {
+        const fromEl = document.getElementById(fieldId + "_from");
+        const toEl = document.getElementById(fieldId + "_to");
+        const from = fromEl ? fromEl.value.trim() : "";
+        const to = toEl ? toEl.value.trim() : "";
+        updates[field.key] = (!from && !to) ? "" : (from + " - " + to);
+      } else {
+        const el = document.getElementById(fieldId);
+        updates[field.key] = el ? el.value.trim() : field.value;
+      }
+    });
+
+
+
+
+    const missingField = findMissingRequiredDangKyField(
+      item.fields.filter(function (f) { return !f.locked && f.type !== "file"; }),
+      updates
+    );
+    if (missingField) { alert('Vui lòng điền "' + missingField + '".'); return; }
+
+
+
+
+    const btn = document.getElementById("saveDangKyBtn");
+    btn.disabled = true;
+    btn.innerText = "Đang lưu...";
+
+
+
+
+    (fileField ? readFilesAsBase64(dangkyEditNewFiles) : Promise.resolve([]))
+      .then(function (fileDataList) {
+        if (fileField) {
+          updates.keepFileUrls = dangkyEditKeepFileUrls;
+          updates.newFiles = fileDataList;
+        }
+
+
+
+
+        google.script.run
+          .withSuccessHandler(function (result) {
+            if (!result.success) {
+              btn.disabled = false;
+              btn.innerText = "Lưu";
+              alert(result.message);
+              return;
+            }
+            dangkyHistoryEditing = false;
+            loadDangKyHistory();
+          })
+          .withFailureHandler(function (error) {
+            btn.disabled = false;
+            btn.innerText = "Lưu";
+            if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+            alert("Có lỗi xảy ra: " + error.message);
+          })
+          .updateDangKy(token(), item.id, updates);
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.innerText = "Lưu";
+        alert("Không thể đọc file đính kèm mới.");
+      });
+  }
+
+
+
+
+  // ==========================================================
+  // HELPER: LOAD KHOA/PHONG + DE AN - MAN HINH CAP NHAT TIEN DO
+  // ==========================================================
+  function loadKhoaPhongList(callback) {
+    if (khoaListCache) { callback(khoaListCache); return; }
+    google.script.run
+      .withSuccessHandler(function (list) {
+        khoaListCache = list;
+        callback(list);
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách khoa/phòng"); })
+      .getAllowedKhoaPhong(token());
+  }
+
+
+
+
+  function loadDeAnListForKhoa(khoa, callback) {
+    if (deAnCacheByKhoa[khoa]) { callback(deAnCacheByKhoa[khoa]); return; }
+    google.script.run
+      .withSuccessHandler(function (list) {
+        deAnCacheByKhoa[khoa] = list;
+        callback(list);
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách đề án"); })
+      .getDeAnListByKhoa(token(), khoa);
+  }
+
+
+
+
+  // ==========================================================
+  // HELPER: LOAD KHOA/PHONG + DE AN - MAN HINH TRA CUU
+  // ==========================================================
+  function loadSearchKhoaPhongList(callback) {
+    if (searchKhoaListCache) { callback(searchKhoaListCache); return; }
+    google.script.run
+      .withSuccessHandler(function (list) {
+        searchKhoaListCache = list;
+        callback(list);
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách khoa/phòng"); })
+      .getAllowedKhoaPhongForSearch(token());
+  }
+
+
+
+
+  function loadSearchDeAnListForKhoa(khoa, callback) {
+    if (searchDeAnCacheByKhoa[khoa]) { callback(searchDeAnCacheByKhoa[khoa]); return; }
+    google.script.run
+      .withSuccessHandler(function (list) {
+        searchDeAnCacheByKhoa[khoa] = list;
+        callback(list);
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách đề án"); })
+      .getDeAnListByKhoaForSearch(token(), khoa);
+  }
+
+
+
+
+  // ==========================================================
+  // TRANG PHAN CONG PHE DUYET (chi Admin)
+  // ==========================================================
+  let phanCongData = [];
+  let phanCongEditing = false;
+  let phanCongTvhdList = [];
+  let phanCongTrangThaiOptions = [];
+
+  function initPhanCongScreen() {
+    document.getElementById("phancongMessage").innerHTML = "";
+    document.getElementById("phancongSyncMessage").innerHTML = "";
+    phanCongEditing = false;
+    loadPhanCongList();
+  }
+
+  function syncPhanCongMadean() {
+    const btn = document.getElementById("phancongSyncBtn");
+    const msg = document.getElementById("phancongSyncMessage");
+    btn.disabled = true;
+    btn.innerText = "Đang đồng bộ...";
+    msg.innerHTML = "";
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        btn.disabled = false;
+        btn.innerText = "Đồng bộ dữ liệu";
+        msg.innerHTML = '<span class="' + (result.success ? "success" : "error") + '">' + escapeHtml(result.message) + '</span>';
+        if (result.success) loadPhanCongList();
+      })
+      .withFailureHandler(function (error) {
+        btn.disabled = false;
+        btn.innerText = "Đồng bộ dữ liệu";
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        msg.innerHTML = '<span class="error">Có lỗi xảy ra: ' + escapeHtml(error.message) + '</span>';
+      })
+      .syncMadeanAcrossAllSheets(token());
+  }
+
+  function loadPhanCongList() {
+    const box = document.getElementById("phancongContent");
+    box.innerHTML = '<div class="empty">Đang tải...</div>';
+    google.script.run
+      .withSuccessHandler(function (result) {
+        phanCongData = result.rows || [];
+        phanCongTvhdList = result.tvhdList || [];
+        phanCongTrangThaiOptions = result.trangthaiOptions || [];
+        renderPhanCongTable();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { box.innerHTML = ""; showSessionExpiredModal(); return; }
+        box.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getPhanCongList(token());
+  }
+
+  function renderPhanCongTable() {
+    const box = document.getElementById("phancongContent");
+    if (!phanCongData || phanCongData.length === 0) {
+      box.innerHTML = '<div class="empty">Chưa có đề án/sáng kiến nào cần phân công (Admin cần điền "Mã đề án" ở Sheet Dangky trước).</div>';
+      return;
+    }
+
+    let html = '<div class="table-wrapper"><table class="history phancong-table"><thead><tr>' +
+      '<th>STT</th><th>Mã đề án/sáng kiến</th><th>Khoa/phòng</th><th>Tên đề án/sáng kiến</th>' +
+      '<th>Người chấm 1</th><th>Người chấm 2</th><th>Trạng thái</th></tr></thead><tbody>';
+
+    phanCongData.forEach(function (row, i) {
+      html += '<tr>' +
+        '<td class="phancong-stt">' + (i + 1) + '</td>' +
+        '<td>' + escapeHtml(row.madean) + '</td>' +
+        '<td>' + escapeHtml(row.khoaphong) + '</td>' +
+        '<td>' + escapeHtml(row.tendean) + '</td>' +
+        '<td>' + renderPhanCongPersonCell(row, i, "nguoicham1") + '</td>' +
+        '<td>' + renderPhanCongPersonCell(row, i, "nguoicham2") + '</td>' +
+        '<td>' + renderPhanCongTrangThaiCell(row, i) + '</td>' +
+        '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    if (phanCongEditing) {
+      html += '<div style="display:flex;gap:10px;margin-top:16px;">' +
+        '<button type="button" class="primary" style="width:auto;padding:10px 20px;" id="savePhanCongBtn" onclick="savePhanCongEdit()">Lưu</button>' +
+        '<button type="button" class="secondary-btn" onclick="cancelPhanCongEdit()">Hủy</button></div>';
+    } else {
+      html += '<button type="button" class="secondary-btn" style="margin-top:16px;" onclick="enterPhanCongEditMode()">Chỉnh sửa</button>';
+    }
+
+    box.innerHTML = html;
+  }
+
+  function renderPhanCongPersonCell(row, i, field) {
+    if (!phanCongEditing) {
+      return row[field] ? escapeHtml(row[field]) : '<span style="color:#999;">(chưa phân công)</span>';
+    }
+    let opts = '<option value="">-- Chọn --</option>';
+    phanCongTvhdList.forEach(function (name) {
+      opts += '<option' + (row[field] === name ? " selected" : "") + '>' + escapeHtml(name) + '</option>';
+    });
+    return '<select id="pcField_' + field + '_' + i + '">' + opts + '</select>';
+  }
+
+  function renderPhanCongTrangThaiCell(row, i) {
+    if (!phanCongEditing) {
+      return row.trangthai ? '<span class="status">' + escapeHtml(row.trangthai) + '</span>' : '<span style="color:#999;">(chưa đặt)</span>';
+    }
+    let opts = '<option value="">-- Chọn --</option>';
+    phanCongTrangThaiOptions.forEach(function (opt) {
+      opts += '<option' + (row.trangthai === opt ? " selected" : "") + '>' + escapeHtml(opt) + '</option>';
+    });
+    return '<select id="pcField_trangthai_' + i + '">' + opts + '</select>';
+  }
+
+  function enterPhanCongEditMode() { phanCongEditing = true; renderPhanCongTable(); }
+  function cancelPhanCongEdit() { phanCongEditing = false; renderPhanCongTable(); }
+
+  function savePhanCongEdit() {
+    const updates = phanCongData.map(function (row, i) {
+      const n1 = document.getElementById("pcField_nguoicham1_" + i);
+      const n2 = document.getElementById("pcField_nguoicham2_" + i);
+      const tt = document.getElementById("pcField_trangthai_" + i);
+      return {
+        rowNumber: row.rowNumber,
+        nguoicham1: n1 ? n1.value : row.nguoicham1,
+        nguoicham2: n2 ? n2.value : row.nguoicham2,
+        trangthai: tt ? tt.value : row.trangthai
+      };
+    });
+
+    const btn = document.getElementById("savePhanCongBtn");
+    if (btn) { btn.disabled = true; btn.innerText = "Đang lưu..."; }
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) {
+          if (btn) { btn.disabled = false; btn.innerText = "Lưu"; }
+          alert(result.message);
+          return;
+        }
+        phanCongEditing = false;
+        loadPhanCongList();
+      })
+      .withFailureHandler(function (error) {
+        if (btn) { btn.disabled = false; btn.innerText = "Lưu"; }
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        alert("Có lỗi xảy ra: " + error.message);
+      })
+      .savePhanCongRows(token(), updates);
+  }
+
+  // ==========================================================
+  // TRANG GUI LAI SAU PHE DUYET
+  // ==========================================================
+  let noplan2KhoaListCache = null;
+  let noplan2DeAnCacheByKhoa = {};
+  let noplan2SelectedDangkyId = "";
+  let noplan2Existing = null;
+  let noplan2Editing = false;
+  let noplan2SelectedFile = [];
+
+  function initNopLan2Screen() {
+    document.getElementById("noplan2Message").innerHTML = "";
+    document.getElementById("np2FormFields").style.display = "none";
+    document.getElementById("np2TenDeAn").innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    document.getElementById("np2TenDeAn").disabled = true;
+    document.getElementById("np2KhoaPhong").value = "";
+    noplan2Existing = null;
+    noplan2Editing = false;
+    noplan2SelectedFile = [];
+    renderNopLan2FileList();
+
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+    document.getElementById("noplan2AdminToggle").style.display = isAdminAcc ? "block" : "none";
+
+    initDeadlineBanner("noplan2DeadlineBanner");
+
+    loadNopLan2TemplateLinks();
+    if (isAdminAcc) loadNopLan2Status();
+
+    loadNopLan2KhoaList(function (list) {
+      const select = document.getElementById("np2KhoaPhong");
+      select.innerHTML = '<option value="">-- Chọn khoa/phòng --</option>';
+      list.forEach(function (item) {
+        const opt = document.createElement("option");
+        opt.value = item; opt.textContent = item;
+        select.appendChild(opt);
+      });
+      if (list.length === 1) { select.value = list[0]; loadNopLan2DeAn(); }
+    });
+  }
+
+  function loadNopLan2TemplateLinks() {
+    const box = document.getElementById("noplan2TemplateLinks");
+    box.innerHTML = '<div class="empty">Đang tải...</div>';
+    google.script.run
+      .withSuccessHandler(function (list) {
+        if (!list || list.length === 0) { box.innerHTML = '<div class="empty">Chưa có biểu mẫu.</div>'; return; }
+        let html = '<div class="dangky-link-list">';
+        list.forEach(function (item, i) {
+          html += '<a href="' + escapeAttr(item.url) + '" target="_blank" rel="noopener">' + (i + 1) + '. ' + escapeHtml(item.name) + '</a>';
+        });
+        html += '</div>';
+        box.innerHTML = html;
+      })
+      .withFailureHandler(function (error) { box.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>'; })
+      .getDangKyTemplateLinks(token());
+  }
+
+  function loadPheDuyetTemplateLinks() {
+    const box = document.getElementById("pheduyetTemplateLinks");
+    box.innerHTML = '<div class="empty">Đang tải...</div>';
+    google.script.run
+      .withSuccessHandler(function (list) {
+        if (!list || list.length === 0) { box.innerHTML = '<div class="empty">Chưa có biểu mẫu.</div>'; return; }
+        let html = '<div class="dangky-link-list">';
+        list.forEach(function (item, i) {
+          html += '<a href="' + escapeAttr(item.url) + '" target="_blank" rel="noopener">' + (i + 1) + '. ' + escapeHtml(item.name) + '</a>';
+        });
+        html += '</div>';
+        box.innerHTML = html;
+      })
+      .withFailureHandler(function (error) { box.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>'; })
+      .getDangKyTemplateLinks(token());
+  }
+
+  function loadNopLan2Status() {
+    google.script.run
+      .withSuccessHandler(function (status) {
+        const el = document.getElementById("noplan2ToggleInput");
+        if (el) el.checked = !!status;
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được trạng thái"); })
+      .getNopLan2Status(token());
+  }
+
+  function toggleNopLan2Status(checked) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) { alert(result.message); loadNopLan2Status(); return; }
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không thể cập nhật"); loadNopLan2Status(); })
+      .setNopLan2Status(token(), checked);
+  }
+
+  function loadNopLan2KhoaList(callback) {
+    if (noplan2KhoaListCache) { callback(noplan2KhoaListCache); return; }
+    google.script.run
+      .withSuccessHandler(function (list) { noplan2KhoaListCache = list; callback(list); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách khoa/phòng"); })
+      .getAllowedKhoaPhong(token());
+  }
+
+  function loadNopLan2DeAn() {
+    const khoa = document.getElementById("np2KhoaPhong").value;
+    const select = document.getElementById("np2TenDeAn");
+    select.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    select.disabled = true;
+    document.getElementById("np2FormFields").style.display = "none";
+    if (!khoa) return;
+
+    if (noplan2DeAnCacheByKhoa[khoa]) { renderNopLan2DeAnOptions(noplan2DeAnCacheByKhoa[khoa]); return; }
+
+    google.script.run
+      .withSuccessHandler(function (list) { noplan2DeAnCacheByKhoa[khoa] = list; renderNopLan2DeAnOptions(list); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách đề án"); })
+      .getDeAnListByKhoa(token(), khoa);
+  }
+
+  function renderNopLan2DeAnOptions(list) {
+    const select = document.getElementById("np2TenDeAn");
+    list.forEach(function (item) {
+      const opt = document.createElement("option");
+      opt.value = item.madean; opt.textContent = item.tendean;
+      opt.dataset.dangkyId = item.dangkyId || "";
+      select.appendChild(opt);
+    });
+    select.disabled = false;
+  }
+
+  function selectNopLan2DeAn() {
+    const select = document.getElementById("np2TenDeAn");
+    const madean = select.value.trim();
+    const khoa = document.getElementById("np2KhoaPhong").value.trim();
+    const selectedOption = select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+    const tenDeAn = selectedOption ? selectedOption.text.trim() : "";
+    noplan2SelectedDangkyId = selectedOption ? (selectedOption.dataset.dangkyId || "") : "";
+
+    document.getElementById("noplan2Message").innerHTML = "";
+    noplan2SelectedFile = [];
+    renderNopLan2FileList();
+
+    if (!madean) { document.getElementById("np2FormFields").style.display = "none"; return; }
+
+    document.getElementById("np2FormFields").style.display = "block";
+    document.getElementById("np2TenSua").value = "";
+    document.getElementById("np2TenSua").disabled = false;
+    document.getElementById("np2ExistingFile").innerHTML = '<div class="empty" style="padding:8px 0;">Đang tải...</div>';
+    document.getElementById("np2SubmitBtn").style.display = "inline-block";
+    document.getElementById("np2SubmitBtn").innerText = "Gửi";
+    document.getElementById("np2EditBtn").style.display = "none";
+    noplan2Editing = false;
+
+    google.script.run
+      .withSuccessHandler(function (detail) {
+        noplan2Existing = detail;
+        renderNopLan2ExistingState();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        document.getElementById("np2ExistingFile").innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getNopLan2Detail(token(), khoa, tenDeAn, madean);
+  }
+
+  function renderNopLan2ExistingState() {
+    const box = document.getElementById("np2ExistingFile");
+    if (!noplan2Existing) { box.innerHTML = ""; return; }
+
+    document.getElementById("np2TenSua").value = noplan2Existing.tendeanNeuSua || "";
+    document.getElementById("np2TenSua").disabled = true;
+    box.innerHTML = noplan2Existing.fileUrl
+      ? '<div class="file-note">File đã gửi: ' + renderFileLinksCell(noplan2Existing.fileUrl) + '</div>'
+      : '<div class="file-note">Chưa có file đính kèm.</div>';
+
+    document.getElementById("np2SubmitBtn").style.display = "none";
+    document.getElementById("np2EditBtn").style.display = "inline-block";
+  }
+
+  function enterNopLan2EditMode() {
+    noplan2Editing = true;
+    document.getElementById("np2TenSua").disabled = false;
+    document.getElementById("np2SubmitBtn").style.display = "inline-block";
+    document.getElementById("np2SubmitBtn").innerText = "Lưu";
+    document.getElementById("np2EditBtn").style.display = "none";
+  }
+
+  function handleNopLan2FileSelect(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (picked.length === 0) return;
+    const f = picked[0];
+    if (!isPdfFileClient_(f)) { alert("Chỉ được đính kèm file định dạng PDF (.pdf)."); return; }
+    noplan2SelectedFile = [f];
+    renderNopLan2FileList();
+  }
+
+  function renderNopLan2FileList() {
+    const box = document.getElementById("np2FileList");
+    if (!box) return;
+    if (noplan2SelectedFile.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    noplan2SelectedFile.forEach(function (f, i) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-remove" onclick="removeNopLan2File(' + i + ')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+  function removeNopLan2File(i) { noplan2SelectedFile.splice(i, 1); renderNopLan2FileList(); }
+
+  function submitNopLan2Form() {
+    const khoaPhong = document.getElementById("np2KhoaPhong").value.trim();
+    const select = document.getElementById("np2TenDeAn");
+    const maDeAn = select.value.trim();
+    const tenDeAn = select.selectedIndex >= 0 ? select.options[select.selectedIndex].text.trim() : "";
+    const tenDeAnNeuSua = document.getElementById("np2TenSua").value.trim();
+
+    document.getElementById("noplan2Message").innerHTML = "";
+
+    if (!khoaPhong || !maDeAn) return showNopLan2Msg("Vui lòng chọn khoa/phòng và đề án/sáng kiến.", false);
+    if (!noplan2Existing && noplan2SelectedFile.length === 0) return showNopLan2Msg("Vui lòng đính kèm file PDF.", false);
+
+    const btn = document.getElementById("np2SubmitBtn");
+    btn.disabled = true;
+
+    readFilesAsBase64(noplan2SelectedFile)
+      .then(function (fileDataList) {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            btn.disabled = false;
+            if (!result || !result.success) { showNopLan2Msg((result && result.message) || "Không thể gửi.", false); return; }
+            showNopLan2Msg(result.message || "Đã gửi thành công.", true);
+            noplan2SelectedFile = [];
+            renderNopLan2FileList();
+            selectNopLan2DeAn();
+          })
+          .withFailureHandler(function (error) {
+            btn.disabled = false;
+            if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+            showNopLan2Msg("Có lỗi xảy ra: " + error.message, false);
+          })
+          .submitNopLan2(token(), {
+            maDeAn: maDeAn, khoaPhong: khoaPhong, tenDeAn: tenDeAn,
+            dangkyId: noplan2SelectedDangkyId,
+            tenDeAnNeuSua: tenDeAnNeuSua,
+            file: fileDataList[0] || null
+          });
+      })
+      .catch(function () { btn.disabled = false; showNopLan2Msg("Không thể đọc file.", false); });
+  }
+
+  function showNopLan2Msg(text, success) {
+    document.getElementById("noplan2Message").innerHTML = '<span class="' + (success ? "success" : "error") + '">' + escapeHtml(text) + '</span>';
+  }
+
+  // ==========================================================
+  // TRANG GUI BAN HOAN CHINH (File_chot)
+  // ==========================================================
+  let filechotKhoaListCache = null;
+  let filechotDeAnCacheByKhoa = {};
+  let filechotExisting = null;
+  let filechotEditing = false;
+  let filechotSelectedFile = [];
+  let filechotSelectedDangkyId = "";
+
+  function initFileChotScreen() {
+    document.getElementById("filechotMessage").innerHTML = "";
+    document.getElementById("fcFormFields").style.display = "none";
+    document.getElementById("fcTenDeAn").innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    document.getElementById("fcTenDeAn").disabled = true;
+    document.getElementById("fcKhoaPhong").value = "";
+    filechotExisting = null;
+    filechotEditing = false;
+    filechotSelectedFile = [];
+    renderFileChotFileList();
+
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+    document.getElementById("filechotAdminToggle").style.display = isAdminAcc ? "block" : "none";
+    if (isAdminAcc) loadFileChotStatus();
+
+    initDeadlineBanner("filechotDeadlineBanner");
+
+    loadFileChotKhoaList(function (list) {
+      const select = document.getElementById("fcKhoaPhong");
+      select.innerHTML = '<option value="">-- Chọn khoa/phòng --</option>';
+      list.forEach(function (item) {
+        const opt = document.createElement("option");
+        opt.value = item; opt.textContent = item;
+        select.appendChild(opt);
+      });
+      if (list.length === 1) { select.value = list[0]; loadFileChotDeAn(); }
+    });
+  }
+
+  function loadFileChotStatus() {
+    google.script.run
+      .withSuccessHandler(function (status) {
+        const el = document.getElementById("filechotToggleInput");
+        if (el) el.checked = !!status;
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được trạng thái"); })
+      .getFileChotStatus(token());
+  }
+
+  function toggleFileChotStatus(checked) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) { alert(result.message); loadFileChotStatus(); return; }
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không thể cập nhật"); loadFileChotStatus(); })
+      .setFileChotStatus(token(), checked);
+  }
+
+  function loadFileChotKhoaList(callback) {
+    if (filechotKhoaListCache) { callback(filechotKhoaListCache); return; }
+    google.script.run
+      .withSuccessHandler(function (list) { filechotKhoaListCache = list; callback(list); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách khoa/phòng"); })
+      .getAllowedKhoaPhong(token());
+  }
+
+  function loadFileChotDeAn() {
+    const khoa = document.getElementById("fcKhoaPhong").value;
+    const select = document.getElementById("fcTenDeAn");
+    select.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    select.disabled = true;
+    document.getElementById("fcFormFields").style.display = "none";
+    if (!khoa) return;
+
+    if (filechotDeAnCacheByKhoa[khoa]) { renderFileChotDeAnOptions(filechotDeAnCacheByKhoa[khoa]); return; }
+
+    google.script.run
+      .withSuccessHandler(function (list) { filechotDeAnCacheByKhoa[khoa] = list; renderFileChotDeAnOptions(list); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách đề án"); })
+      .getDeAnListByKhoa(token(), khoa);
+  }
+
+  function renderFileChotDeAnOptions(list) {
+    const select = document.getElementById("fcTenDeAn");
+    list.forEach(function (item) {
+      const opt = document.createElement("option");
+      opt.value = item.madean; opt.textContent = item.tendean;
+      opt.dataset.dangkyId = item.dangkyId || "";
+      select.appendChild(opt);
+    });
+    select.disabled = false;
+  }
+
+  function selectFileChotDeAn() {
+    const select = document.getElementById("fcTenDeAn");
+    const madean = select.value.trim();
+    const khoa = document.getElementById("fcKhoaPhong").value.trim();
+    const selectedOption = select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+    const tenDeAn = selectedOption ? selectedOption.text.trim() : "";
+    filechotSelectedDangkyId = selectedOption ? (selectedOption.dataset.dangkyId || "") : "";
+
+    document.getElementById("filechotMessage").innerHTML = "";
+    filechotSelectedFile = [];
+    renderFileChotFileList();
+
+    if (!madean) { document.getElementById("fcFormFields").style.display = "none"; return; }
+
+    document.getElementById("fcFormFields").style.display = "block";
+    document.getElementById("fcExistingFile").innerHTML = '<div class="empty" style="padding:8px 0;">Đang tải...</div>';
+    document.getElementById("fcSubmitBtn").style.display = "inline-block";
+    document.getElementById("fcSubmitBtn").innerText = "Gửi";
+    document.getElementById("fcEditBtn").style.display = "none";
+    filechotEditing = false;
+
+    google.script.run
+      .withSuccessHandler(function (detail) {
+        filechotExisting = detail;
+        renderFileChotExistingState();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        document.getElementById("fcExistingFile").innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getFileChotDetail(token(), khoa, tenDeAn, madean);
+  }
+
+  function renderFileChotExistingState() {
+    const box = document.getElementById("fcExistingFile");
+    if (!filechotExisting) { box.innerHTML = ""; return; }
+
+    box.innerHTML = filechotExisting.fileUrl
+      ? '<div class="file-note">File đã gửi: ' + renderFileLinksCell(filechotExisting.fileUrl) + '</div>'
+      : '<div class="file-note">Chưa có file đính kèm.</div>';
+
+    document.getElementById("fcSubmitBtn").style.display = "none";
+    document.getElementById("fcEditBtn").style.display = "inline-block";
+  }
+
+  function enterFileChotEditMode() {
+    filechotEditing = true;
+    document.getElementById("fcSubmitBtn").style.display = "inline-block";
+    document.getElementById("fcSubmitBtn").innerText = "Lưu";
+    document.getElementById("fcEditBtn").style.display = "none";
+  }
+
+  function handleFileChotFileSelect(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (picked.length === 0) return;
+    const f = picked[0];
+    if (!isPdfFileClient_(f)) { alert("Chỉ được đính kèm file định dạng PDF (.pdf)."); return; }
+    filechotSelectedFile = [f];
+    renderFileChotFileList();
+  }
+
+  function renderFileChotFileList() {
+    const box = document.getElementById("fcFileList");
+    if (!box) return;
+    if (filechotSelectedFile.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    filechotSelectedFile.forEach(function (f, i) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-remove" onclick="removeFileChotFile(' + i + ')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+  function removeFileChotFile(i) { filechotSelectedFile.splice(i, 1); renderFileChotFileList(); }
+
+  function submitFileChotForm() {
+    const khoaPhong = document.getElementById("fcKhoaPhong").value.trim();
+    const select = document.getElementById("fcTenDeAn");
+    const maDeAn = select.value.trim();
+    const tenDeAn = select.selectedIndex >= 0 ? select.options[select.selectedIndex].text.trim() : "";
+
+    document.getElementById("filechotMessage").innerHTML = "";
+
+    if (!khoaPhong || !maDeAn) return showFileChotMsg("Vui lòng chọn khoa/phòng và đề án/sáng kiến.", false);
+    if (!filechotExisting && filechotSelectedFile.length === 0) return showFileChotMsg("Vui lòng đính kèm file PDF.", false);
+
+    const btn = document.getElementById("fcSubmitBtn");
+    btn.disabled = true;
+
+    readFilesAsBase64(filechotSelectedFile)
+      .then(function (fileDataList) {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            btn.disabled = false;
+            if (!result || !result.success) { showFileChotMsg((result && result.message) || "Không thể gửi.", false); return; }
+            showFileChotMsg(result.message || "Đã gửi thành công.", true);
+            filechotSelectedFile = [];
+            renderFileChotFileList();
+            selectFileChotDeAn();
+          })
+          .withFailureHandler(function (error) {
+            btn.disabled = false;
+            if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+            showFileChotMsg("Có lỗi xảy ra: " + error.message, false);
+          })
+          .submitFileChot(token(), {
+            maDeAn: maDeAn, khoaPhong: khoaPhong, tenDeAn: tenDeAn,
+            dangkyId: filechotSelectedDangkyId,
+            file: fileDataList[0] || null
+          });
+      })
+      .catch(function () { btn.disabled = false; showFileChotMsg("Không thể đọc file.", false); });
+  }
+
+  function showFileChotMsg(text, success) {
+    document.getElementById("filechotMessage").innerHTML = '<span class="' + (success ? "success" : "error") + '">' + escapeHtml(text) + '</span>';
+  }
+
+  // ==========================================================
+  // TRANG BAO CAO NGHIEM THU (BC_nghiemthu)
+  // ==========================================================
+  let bcnghiemthuKhoaListCache = null;
+  let bcnghiemthuDeAnCacheByKhoa = {};
+  let bcnghiemthuExisting = null;
+  let bcnghiemthuEditing = false;
+  let bcnghiemthuSelectedFile = [];
+  let bcnghiemthuSelectedDangkyId = "";
+
+  function initBCNghiemThuScreen() {
+    document.getElementById("bcnghiemthuMessage").innerHTML = "";
+    document.getElementById("bcFormFields").style.display = "none";
+    document.getElementById("bcTenDeAn").innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    document.getElementById("bcTenDeAn").disabled = true;
+    document.getElementById("bcKhoaPhong").value = "";
+    bcnghiemthuExisting = null;
+    bcnghiemthuEditing = false;
+    bcnghiemthuSelectedFile = [];
+    renderBCNghiemThuFileList();
+
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+    document.getElementById("bcnghiemthuAdminToggle").style.display = isAdminAcc ? "block" : "none";
+    if (isAdminAcc) loadBCNghiemThuStatus();
+
+    initDeadlineBanner("bcnghiemthuDeadlineBanner");
+
+    loadBCNghiemThuKhoaList(function (list) {
+      const select = document.getElementById("bcKhoaPhong");
+      select.innerHTML = '<option value="">-- Chọn khoa/phòng --</option>';
+      list.forEach(function (item) {
+        const opt = document.createElement("option");
+        opt.value = item; opt.textContent = item;
+        select.appendChild(opt);
+      });
+      if (list.length === 1) { select.value = list[0]; loadBCNghiemThuDeAn(); }
+    });
+  }
+
+  function loadBCNghiemThuStatus() {
+    google.script.run
+      .withSuccessHandler(function (status) {
+        const el = document.getElementById("bcnghiemthuToggleInput");
+        if (el) el.checked = !!status;
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được trạng thái"); })
+      .getBCNghiemThuStatus(token());
+  }
+
+  function toggleBCNghiemThuStatus(checked) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) { alert(result.message); loadBCNghiemThuStatus(); return; }
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không thể cập nhật"); loadBCNghiemThuStatus(); })
+      .setBCNghiemThuStatus(token(), checked);
+  }
+
+  function loadBCNghiemThuKhoaList(callback) {
+    if (bcnghiemthuKhoaListCache) { callback(bcnghiemthuKhoaListCache); return; }
+    google.script.run
+      .withSuccessHandler(function (list) { bcnghiemthuKhoaListCache = list; callback(list); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách khoa/phòng"); })
+      .getAllowedKhoaPhong(token());
+  }
+
+  function loadBCNghiemThuDeAn() {
+    const khoa = document.getElementById("bcKhoaPhong").value;
+    const select = document.getElementById("bcTenDeAn");
+    select.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    select.disabled = true;
+    document.getElementById("bcFormFields").style.display = "none";
+    if (!khoa) return;
+
+    if (bcnghiemthuDeAnCacheByKhoa[khoa]) { renderBCNghiemThuDeAnOptions(bcnghiemthuDeAnCacheByKhoa[khoa]); return; }
+
+    google.script.run
+      .withSuccessHandler(function (list) { bcnghiemthuDeAnCacheByKhoa[khoa] = list; renderBCNghiemThuDeAnOptions(list); })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách đề án"); })
+      .getDeAnListByKhoa(token(), khoa);
+  }
+
+  function renderBCNghiemThuDeAnOptions(list) {
+    const select = document.getElementById("bcTenDeAn");
+    list.forEach(function (item) {
+      const opt = document.createElement("option");
+      opt.value = item.madean; opt.textContent = item.tendean;
+      opt.dataset.dangkyId = item.dangkyId || "";
+      select.appendChild(opt);
+    });
+    select.disabled = false;
+  }
+
+  function selectBCNghiemThuDeAn() {
+    const select = document.getElementById("bcTenDeAn");
+    const madean = select.value.trim();
+    const khoa = document.getElementById("bcKhoaPhong").value.trim();
+    const selectedOption = select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+    const tenDeAn = selectedOption ? selectedOption.text.trim() : "";
+    bcnghiemthuSelectedDangkyId = selectedOption ? (selectedOption.dataset.dangkyId || "") : "";
+
+    document.getElementById("bcnghiemthuMessage").innerHTML = "";
+    bcnghiemthuSelectedFile = [];
+    renderBCNghiemThuFileList();
+
+    if (!madean) { document.getElementById("bcFormFields").style.display = "none"; return; }
+
+    document.getElementById("bcFormFields").style.display = "block";
+    document.getElementById("bcExistingFile").innerHTML = '<div class="empty" style="padding:8px 0;">Đang tải...</div>';
+    document.getElementById("bcSubmitBtn").style.display = "inline-block";
+    document.getElementById("bcSubmitBtn").innerText = "Gửi";
+    document.getElementById("bcEditBtn").style.display = "none";
+    bcnghiemthuEditing = false;
+
+    google.script.run
+      .withSuccessHandler(function (detail) {
+        bcnghiemthuExisting = detail;
+        renderBCNghiemThuExistingState();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        document.getElementById("bcExistingFile").innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getBCNghiemThuDetail(token(), khoa, tenDeAn, madean);
+  }
+
+  function renderBCNghiemThuExistingState() {
+    const box = document.getElementById("bcExistingFile");
+    if (!bcnghiemthuExisting) { box.innerHTML = ""; return; }
+
+    box.innerHTML = bcnghiemthuExisting.fileUrl
+      ? '<div class="file-note">File đã gửi: ' + renderFileLinksCell(bcnghiemthuExisting.fileUrl) + '</div>'
+      : '<div class="file-note">Chưa có file đính kèm.</div>';
+
+    document.getElementById("bcSubmitBtn").style.display = "none";
+    document.getElementById("bcEditBtn").style.display = "inline-block";
+  }
+
+  function enterBCNghiemThuEditMode() {
+    bcnghiemthuEditing = true;
+    document.getElementById("bcSubmitBtn").style.display = "inline-block";
+    document.getElementById("bcSubmitBtn").innerText = "Lưu";
+    document.getElementById("bcEditBtn").style.display = "none";
+  }
+
+  function handleBCNghiemThuFileSelect(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (picked.length === 0) return;
+    const f = picked[0];
+    if (!isPdfFileClient_(f)) { alert("Chỉ được đính kèm file định dạng PDF (.pdf)."); return; }
+    bcnghiemthuSelectedFile = [f];
+    renderBCNghiemThuFileList();
+  }
+
+  function renderBCNghiemThuFileList() {
+    const box = document.getElementById("bcFileList");
+    if (!box) return;
+    if (bcnghiemthuSelectedFile.length === 0) { box.innerHTML = ""; return; }
+    let html = "";
+    bcnghiemthuSelectedFile.forEach(function (f, i) {
+      html += '<div class="file-chip"><span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-remove" onclick="removeBCNghiemThuFile(' + i + ')">✕</span></div>';
+    });
+    box.innerHTML = html;
+  }
+
+  function removeBCNghiemThuFile(i) { bcnghiemthuSelectedFile.splice(i, 1); renderBCNghiemThuFileList(); }
+
+  function submitBCNghiemThuForm() {
+    const khoaPhong = document.getElementById("bcKhoaPhong").value.trim();
+    const select = document.getElementById("bcTenDeAn");
+    const maDeAn = select.value.trim();
+    const tenDeAn = select.selectedIndex >= 0 ? select.options[select.selectedIndex].text.trim() : "";
+
+    document.getElementById("bcnghiemthuMessage").innerHTML = "";
+
+    if (!khoaPhong || !maDeAn) return showBCNghiemThuMsg("Vui lòng chọn khoa/phòng và đề án/sáng kiến.", false);
+    if (!bcnghiemthuExisting && bcnghiemthuSelectedFile.length === 0) return showBCNghiemThuMsg("Vui lòng đính kèm file PDF.", false);
+
+    const btn = document.getElementById("bcSubmitBtn");
+    btn.disabled = true;
+
+    readFilesAsBase64(bcnghiemthuSelectedFile)
+      .then(function (fileDataList) {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            btn.disabled = false;
+            if (!result || !result.success) { showBCNghiemThuMsg((result && result.message) || "Không thể gửi.", false); return; }
+            showBCNghiemThuMsg(result.message || "Đã gửi thành công.", true);
+            bcnghiemthuSelectedFile = [];
+            renderBCNghiemThuFileList();
+            selectBCNghiemThuDeAn();
+          })
+          .withFailureHandler(function (error) {
+            btn.disabled = false;
+            if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+            showBCNghiemThuMsg("Có lỗi xảy ra: " + error.message, false);
+          })
+          .submitBCNghiemThu(token(), {
+            maDeAn: maDeAn, khoaPhong: khoaPhong, tenDeAn: tenDeAn,
+            dangkyId: bcnghiemthuSelectedDangkyId,
+            file: fileDataList[0] || null
+          });
+      })
+      .catch(function () { btn.disabled = false; showBCNghiemThuMsg("Không thể đọc file.", false); });
+  }
+
+  function showBCNghiemThuMsg(text, success) {
+    document.getElementById("bcnghiemthuMessage").innerHTML = '<span class="' + (success ? "success" : "error") + '">' + escapeHtml(text) + '</span>';
+  }
+
+  // ==========================================================
+  // TRANG NGHIEM THU - CHI 1 LAN duy nhat.
+  // ==========================================================
+  let ntDeAnListCache = null;
+  let ntKhoaGroups = {};
+  let ntCurrentData = null;
+  let ntSelectedKhoa = "";
+  let ntSelectedMaDeAn = "";
+  let ntSelectedTenDeAn = "";
+  let ntSelectedDangkyId = "";
+  let ntOwnEditing = false;
+  let ntExpandedPhieuIndex = null;
+
+  function initNghiemThuScreen() {
+    document.getElementById("nghiemthuSplitView").style.display = "none";
+    document.getElementById("ntKhoaPhong").innerHTML = '<option value="">-- Chọn khoa/phòng --</option>';
+    document.getElementById("ntTenDeAn").innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    document.getElementById("ntTenDeAn").disabled = true;
+    document.getElementById("nghiemthuEmptyNote").style.display = "none";
+    ntSelectedKhoa = ""; ntSelectedMaDeAn = ""; ntSelectedTenDeAn = ""; ntSelectedDangkyId = "";
+    ntCurrentData = null;
+    ntDeAnListCache = null;
+
+    initDeadlineBanner("nghiemthuDeadlineBanner");
+
+    loadNghiemThuDeAnList();
+  }
+
+  function loadNghiemThuDeAnList() {
+    if (ntDeAnListCache) { renderNghiemThuKhoaOptions(); return; }
+    google.script.run
+      .withSuccessHandler(function (list) {
+        ntDeAnListCache = list || [];
+        renderNghiemThuKhoaOptions();
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách đề án được phân công"); })
+      .getNghiemThuDeAnList(token());
+  }
+
+  function renderNghiemThuKhoaOptions() {
+    const select = document.getElementById("ntKhoaPhong");
+    select.innerHTML = '<option value="">-- Chọn khoa/phòng --</option>';
+    ntKhoaGroups = {};
+
+    (ntDeAnListCache || []).forEach(function (item) {
+      if (!ntKhoaGroups[item.khoaphong]) ntKhoaGroups[item.khoaphong] = [];
+      ntKhoaGroups[item.khoaphong].push(item);
+    });
+
+    const khoaList = Object.keys(ntKhoaGroups).sort(function (a, b) { return a.localeCompare(b, "vi", { sensitivity: "base" }); });
+    document.getElementById("nghiemthuEmptyNote").style.display = khoaList.length === 0 ? "block" : "none";
+
+    khoaList.forEach(function (k) {
+      const opt = document.createElement("option");
+      opt.value = k; opt.textContent = k;
+      select.appendChild(opt);
+    });
+
+    if (khoaList.length === 1) { select.value = khoaList[0]; loadNghiemThuDeAnByKhoa(); }
+  }
+
+  function loadNghiemThuDeAnByKhoa() {
+    const khoa = document.getElementById("ntKhoaPhong").value;
+    const select = document.getElementById("ntTenDeAn");
+    select.innerHTML = '<option value="">-- Chọn đề án/sáng kiến --</option>';
+    select.disabled = true;
+    document.getElementById("nghiemthuSplitView").style.display = "none";
+    ntSelectedKhoa = khoa; ntSelectedMaDeAn = ""; ntSelectedTenDeAn = ""; ntSelectedDangkyId = "";
+    if (!khoa) return;
+
+    (ntKhoaGroups[khoa] || []).forEach(function (item) {
+      const opt = document.createElement("option");
+      opt.value = item.madean; opt.textContent = item.tendean;
+      opt.dataset.dangkyId = item.dangkyId || "";
+      select.appendChild(opt);
+    });
+    select.disabled = false;
+
+    if ((ntKhoaGroups[khoa] || []).length === 1) {
+      select.value = ntKhoaGroups[khoa][0].madean;
+      selectNghiemThuDeAn();
+    }
+  }
+
+  function selectNghiemThuDeAn() {
+    const select = document.getElementById("ntTenDeAn");
+    const madean = select.value.trim();
+    const selectedOption = select.selectedIndex >= 0 ? select.options[select.selectedIndex] : null;
+    const tenDeAn = selectedOption ? selectedOption.text.trim() : "";
+    ntSelectedMaDeAn = madean;
+    ntSelectedTenDeAn = tenDeAn;
+    ntSelectedDangkyId = selectedOption ? (selectedOption.dataset.dangkyId || "") : "";
+
+    if (!madean) { document.getElementById("nghiemthuSplitView").style.display = "none"; return; }
+    loadNghiemThuData();
+  }
+
+  function loadNghiemThuData() {
+    document.getElementById("nghiemthuSplitView").style.display = "block";
+    document.getElementById("nghiemthuFileBox").innerHTML = '<div class="empty">Đang tải...</div>';
+    document.getElementById("nghiemthuFormBox").innerHTML = '<div class="empty">Đang tải...</div>';
+    document.getElementById("nghiemthuPhieuList").innerHTML = "";
+    document.getElementById("nghiemthuPhieuDetail").innerHTML = "";
+    document.getElementById("nghiemthuDetailPanel").classList.remove("open");
+    ntOwnEditing = false;
+    ntExpandedPhieuIndex = null;
+
+    google.script.run
+      .withSuccessHandler(function (data) {
+        ntCurrentData = data;
+        renderNghiemThuSplitView();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        document.getElementById("nghiemthuFormBox").innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+        document.getElementById("nghiemthuFileBox").innerHTML = "";
+      })
+      .getNghiemThuData(token(), ntSelectedKhoa, ntSelectedTenDeAn, ntSelectedMaDeAn, ntSelectedDangkyId);
+  }
+
+  function renderNghiemThuSplitView() {
+    const data = ntCurrentData;
+    if (!data) return;
+
+    document.getElementById("nghiemthuFormTitle").innerText = data.formTitle;
+    document.getElementById("nghiemthuFileBox").innerHTML = renderPheDuyetFileBoxHtml_(data.fileUrl);
+
+    renderNghiemThuFormBox();
+    renderNghiemThuPhieuList();
+  }
+
+  function renderNghiemThuScoreTableHtml(idPrefix, tieuChi, diemValues, readonly, totalOverride, disabled) {
+    let html = '<div class="table-wrapper"><table class="pheduyet-score-table"><thead><tr><th style="width:34px;">STT</th><th>Tiêu chí nhận xét</th><th>Điểm đạt được</th></tr></thead><tbody>';
+    let sumForDisplay = 0;
+    tieuChi.forEach(function (tc, i) {
+      const val = diemValues && diemValues[tc.key] !== undefined ? diemValues[tc.key] : "";
+      sumForDisplay += parseFloat(val) || 0;
+      if (readonly) {
+        html += '<tr><td class="pheduyet-stt">' + (i + 1) + '</td><td>' + escapeHtml(tc.label) + '</td><td>' + escapeHtml(String(val || 0)) + ' / ' + tc.max + '</td></tr>';
+      } else {
+        html += '<tr><td class="pheduyet-stt">' + (i + 1) + '</td><td>' + escapeHtml(tc.label) + '</td>' +
+          '<td class="pheduyet-diem-cell">' +
+            '<input type="number" autocomplete="off" min="0" max="' + tc.max + '" step="0.1" id="' + idPrefix + '_diem_' + tc.key + '" value="' + escapeAttr(val) + '"' + (disabled ? " disabled" : "") + ' oninput="recomputeNghiemThuTotal(\'' + idPrefix + '\')">' +
+            '<div class="pheduyet-diem-hint">Tối đa ' + tc.max + ' điểm</div>' +
+          '</td></tr>';
+      }
+    });
+    const maxTotal = tieuChi.reduce(function (s, tc) { return s + tc.max; }, 0);
+    const totalDisplay = readonly
+      ? (totalOverride !== undefined && totalOverride !== "" && totalOverride !== null ? totalOverride : sumForDisplay)
+      : 0;
+    html += '<tr class="pheduyet-total-row"><td colspan="2">Tổng điểm</td><td><span class="pheduyet-total-value" id="' + idPrefix + '_total">' +
+      escapeHtml(String(totalDisplay)) + '</span> / ' + maxTotal + '</td></tr>';
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function recomputeNghiemThuTotal(idPrefix) {
+    if (!ntCurrentData) return;
+    let s = 0;
+    ntCurrentData.tieuChi.forEach(function (tc) {
+      const el = document.getElementById(idPrefix + "_diem_" + tc.key);
+      if (el) s += parseFloat(el.value) || 0;
+    });
+    const totalEl = document.getElementById(idPrefix + "_total");
+    if (totalEl) totalEl.innerText = Math.round(s * 10) / 10;
+  }
+
+  function renderNghiemThuFormBox() {
+    const data = ntCurrentData;
+    const box = document.getElementById("nghiemthuFormBox");
+
+    if (data.isAdmin) {
+      box.innerHTML = '<div class="empty">Tài khoản Admin chỉ xem, không chấm điểm. Xem chi tiết từng phiếu ở danh sách bên dưới.</div>';
+      return;
+    }
+
+    if (!data.isAssigned) {
+      box.innerHTML = '<div class="empty">Bạn không được phân công nghiệm thu đề án/sáng kiến này.</div>';
+      return;
+    }
+
+    if (data.ownPhieu && !ntOwnEditing) {
+      let html = '<div class="file-note">Bạn đã nộp phiếu nghiệm thu cho đề án/sáng kiến này.</div>';
+      html += renderNghiemThuScoreTableHtml("ntOwnView", data.tieuChi, data.ownPhieu.diem, true, data.ownPhieu.tongdiem, false);
+      html += '<div class="form-group"><label><input type="checkbox" disabled' + (data.ownPhieu.dexuat ? " checked" : "") + ' style="width:auto;margin-right:8px;">' + escapeHtml(data.dexuatLabel) + '</label></div>';
+      html += '<div class="form-group"><label>Ý kiến nhận xét</label><div>' + (data.ownPhieu.ykien ? nl2br(data.ownPhieu.ykien) : '<span style="color:#999;">(không có)</span>') + '</div></div>';
+      html += '<div class="form-group"><label>Kết luận</label><div><b>' + escapeHtml(data.ownPhieu.ketluan) + '</b></div></div>';
+      if (data.canSubmit) {
+        html += '<button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;" onclick="enterNghiemThuEditMode()">Chỉnh sửa</button>';
+      } else if (data.blockedMessage) {
+        html += '<div class="file-note" style="color:var(--color-danger);">' + escapeHtml(data.blockedMessage) + '</div>';
+      }
+      box.innerHTML = html;
+      return;
+    }
+
+    if (!data.canSubmit && !data.ownPhieu) {
+      box.innerHTML = '<div class="empty">' + escapeHtml(data.blockedMessage || "Đợt nghiệm thu hiện chưa mở.") + '</div>';
+      return;
+    }
+
+    const disabled = !data.hasFile;
+    const diemValues = data.ownPhieu ? data.ownPhieu.diem : {};
+    let html = '';
+    if (disabled) {
+      html += '<div class="file-note" style="color:var(--color-danger);">Chưa có báo cáo nghiệm thu để chấm - bảng kiểm bên dưới tạm khóa cho tới khi có file.</div>';
+    }
+    html += '<div style="' + (disabled ? "opacity:0.5;" : "") + '">';
+    html += renderNghiemThuScoreTableHtml("ntForm", data.tieuChi, diemValues, false, undefined, disabled);
+    html += '<div class="form-group"><label><input type="checkbox" id="ntFormDexuat"' + (disabled ? " disabled" : "") + (data.ownPhieu && data.ownPhieu.dexuat ? " checked" : "") + ' style="width:auto;margin-right:8px;">' + escapeHtml(data.dexuatLabel) + '</label></div>';
+    html += '<div class="form-group"><label>Ý kiến nhận xét</label><textarea id="ntFormYKien"' + (disabled ? " disabled" : "") + '>' + escapeHtml(data.ownPhieu ? data.ownPhieu.ykien : "") + '</textarea></div>';
+
+    html += '<div class="form-group"><label>Kết luận</label>';
+    data.ketLuanOptions.forEach(function (opt) {
+      const checked = data.ownPhieu && data.ownPhieu.ketluan === opt ? "checked" : "";
+      html += '<label class="dangky-radio-option' + (disabled ? " disabled" : "") + '"><input type="radio" name="ntFormKetLuan" value="' + escapeAttr(opt) + '" ' + checked + (disabled ? " disabled" : "") + '><span class="opt-label">' + escapeHtml(opt) + '</span></label>';
+    });
+    html += '</div>';
+
+    html += '<div style="display:flex;gap:10px;">';
+    if (data.ownPhieu) html += '<button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;" onclick="cancelNghiemThuEdit()">Hủy</button>';
+    html += '<button type="button" class="primary" style="width:auto;padding:10px 20px;" id="ntFormSaveBtn"' + (disabled ? " disabled" : "") + ' onclick="saveNghiemThuForm()">Lưu</button>';
+    html += '</div>';
+    html += '<div id="nghiemthuFormMessage" class="msg"></div>';
+    html += '</div>';
+
+    box.innerHTML = html;
+    if (!disabled) recomputeNghiemThuTotal("ntForm");
+  }
+
+  function enterNghiemThuEditMode() { ntOwnEditing = true; renderNghiemThuFormBox(); }
+  function cancelNghiemThuEdit() { ntOwnEditing = false; renderNghiemThuFormBox(); }
+
+  function saveNghiemThuForm() {
+    const data = ntCurrentData;
+    const diem = {};
+    data.tieuChi.forEach(function (tc) {
+      const el = document.getElementById("ntForm_diem_" + tc.key);
+      diem[tc.key] = el ? el.value : "";
+    });
+    const dexuat = document.getElementById("ntFormDexuat").checked;
+    const ykien = document.getElementById("ntFormYKien").value.trim();
+    const ketLuanEl = document.querySelector('input[name="ntFormKetLuan"]:checked');
+    const ketLuan = ketLuanEl ? ketLuanEl.value : "";
+
+    const msgBox = document.getElementById("nghiemthuFormMessage");
+    msgBox.innerHTML = "";
+
+    if (!ketLuan) { msgBox.innerHTML = '<span class="error">Vui lòng chọn Kết luận.</span>'; return; }
+
+    const btn = document.getElementById("ntFormSaveBtn");
+    btn.disabled = true; btn.innerText = "Đang lưu...";
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        btn.disabled = false; btn.innerText = "Lưu";
+        if (!result.success) { msgBox.innerHTML = '<span class="error">' + escapeHtml(result.message) + '</span>'; return; }
+        ntOwnEditing = false;
+        loadNghiemThuData();
+      })
+      .withFailureHandler(function (error) {
+        btn.disabled = false; btn.innerText = "Lưu";
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        msgBox.innerHTML = '<span class="error">Có lỗi xảy ra: ' + escapeHtml(error.message) + '</span>';
+      })
+      .saveNghiemThuPhieu(token(), {
+        maDeAn: ntSelectedMaDeAn, khoaPhong: ntSelectedKhoa, tenDeAn: ntSelectedTenDeAn, dangkyId: ntSelectedDangkyId,
+        diem: diem, dexuatThanhPho: dexuat, ykienNhanXet: ykien, ketLuan: ketLuan
+      });
+  }
+
+  function renderNghiemThuPhieuList() {
+    const data = ntCurrentData;
+    const listBox = document.getElementById("nghiemthuPhieuList");
+    const detailBox = document.getElementById("nghiemthuPhieuDetail");
+    const panel = document.getElementById("nghiemthuDetailPanel");
+    detailBox.innerHTML = "";
+    panel.classList.remove("open");
+
+    if (!data.phieuList || data.phieuList.length === 0) {
+      listBox.innerHTML = '<div class="empty">Chưa có phiếu nghiệm thu nào.</div>';
+      return;
+    }
+
+    let html = "";
+    data.phieuList.forEach(function (p, i) {
+      const active = ntExpandedPhieuIndex === i ? " active" : "";
+      html += '<button type="button" class="dangky-history-btn' + active + '" onclick="toggleNghiemThuPhieuDetail(' + i + ')">Phiếu nghiệm thu ' + (i + 1) + ' - ' + escapeHtml(ntSelectedKhoa) + '</button>';
+    });
+    listBox.innerHTML = html;
+
+    if (ntExpandedPhieuIndex !== null) renderNghiemThuPhieuDetail();
+  }
+
+  function toggleNghiemThuPhieuDetail(index) {
+    ntExpandedPhieuIndex = (ntExpandedPhieuIndex === index) ? null : index;
+    renderNghiemThuPhieuList();
+  }
+
+  function renderNghiemThuPhieuDetail() {
+    const data = ntCurrentData;
+    const detailBox = document.getElementById("nghiemthuPhieuDetail");
+    const panel = document.getElementById("nghiemthuDetailPanel");
+    const p = data.phieuList[ntExpandedPhieuIndex];
+    if (!p) { detailBox.innerHTML = ""; panel.classList.remove("open"); return; }
+    panel.classList.add("open");
+
+    let html = '<div class="dangky-detail-box"><h3 style="margin-top:0;color:var(--color-primary);">Người nhận xét: ' + escapeHtml(p.hoTen || "---") + '</h3>';
+    html += renderNghiemThuScoreTableHtml("ntPhieuView" + ntExpandedPhieuIndex, data.tieuChi, p.diem, true, p.tongdiem, false);
+    html += '<div class="form-group"><label><input type="checkbox" disabled' + (p.dexuat ? " checked" : "") + ' style="width:auto;margin-right:8px;">' + escapeHtml(data.dexuatLabel) + '</label></div>';
+    html += '<div class="form-group"><label>Ý kiến nhận xét</label><div>' + (p.ykien ? nl2br(p.ykien) : '<span style="color:#999;">(không có)</span>') + '</div></div>';
+    html += '<div class="form-group"><label>Kết luận</label><div><b>' + escapeHtml(p.ketluan) + '</b></div></div>';
+    html += '<div class="file-note">Thời gian nộp: ' + escapeHtml(p.thoigian) + '</div>';
+    html += '</div>';
+    detailBox.innerHTML = html;
+  }
+
+  // ==========================================================
+  // TRANG PHE DUYET
+  // - Admin: chi xem (khong co form nhap), 2 cong tac bat/tat rieng cho lan 1 / lan 2.
+  // - TVHĐ: nhap/sua phieu CUA CHINH MINH.
+  // - "Chua phe duyet": dang danh sach (accordion), KHONG con dropdown chon khoa/ten cho TVHĐ.
+  //   Admin GIU dropdown loc (chi de LOC BOT danh sach, mac dinh hien TAT CA).
+  // ==========================================================
+  const PHEDUYET_MAX_DIEM_CLIENT = 10;
+
+  let pheduyetLan = 1;
+  let pheduyetSubTab = "chua";
+  let pheduyetDeAnListCache = null;
+  let pheduyetCurrentData = null;
+  let pheduyetSelectedKhoa = "";
+  let pheduyetSelectedMaDeAn = "";
+  let pheduyetSelectedTenDeAn = "";
+  let pheduyetSelectedDangkyId = "";
+  let pheduyetOwnEditing = false;
+  let pheduyetHistoryData = [];
+  let pheduyetHistoryExpandedIndex = null;
+  let pheduyetHistorySelectedPhieuIndex = null;
+  let pheduyetHistoryEditingOwn = false; // dang o che do Sua ngay tai cho trong tab "Da phe duyet"
+
+  // Danh sach "Chua phe duyet" dang duoc hien thi (sau khi loc bo da nop/da du 2 phieu +
+  // loc theo dropdown Khoa/phong cua Admin neu co chon) va vi tri dang mo (accordion)
+  let pheduyetChuaFilteredList = [];
+  let pheduyetChuaExpandedIndex = null;
+
+  function initPheDuyetScreen() {
+    pheduyetLan = 1;
+    pheduyetSubTab = "chua";
+    document.querySelectorAll("#pheduyetTabs .report-tab-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-lan") === "1");
+    });
+    document.querySelectorAll("#pheduyetSubTabs .report-tab-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-subtab") === "chua");
+    });
+    document.getElementById("pheduyetSubTabChua").style.display = "block";
+    document.getElementById("pheduyetSubTabDa").style.display = "none";
+    document.getElementById("pdKhoaPhongFilter").innerHTML = '<option value="">Tất cả khoa/phòng</option>';
+    document.getElementById("pheduyetEmptyNote").style.display = "none";
+    pheduyetSelectedKhoa = ""; pheduyetSelectedMaDeAn = ""; pheduyetSelectedTenDeAn = ""; pheduyetSelectedDangkyId = "";
+    pheduyetCurrentData = null;
+    pheduyetDeAnListCache = null;
+    pheduyetChuaFilteredList = [];
+    pheduyetChuaExpandedIndex = null;
+    pheduyetHistoryEditingOwn = false;
+    document.getElementById("pheduyetChuaList").innerHTML = "";
+    document.getElementById("pheduyetChuaDetail").innerHTML = "";
+    document.getElementById("pheduyetChuaDetailPanel").classList.remove("open");
+
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+    document.getElementById("pheduyetAdminToggle").style.display = isAdminAcc ? "block" : "none";
+    document.getElementById("pheduyetChuaFilterBox").style.display = isAdminAcc ? "block" : "none";
+    if (isAdminAcc) loadPheDuyetStatus();
+
+    initDeadlineBanner("pheduyetDeadlineBanner");
+    loadPheDuyetTemplateLinks();
+    loadPheDuyetDeAnList();
+    loadPheDuyetHistoryForRound();
+  }
+
+  function selectPheDuyetSubTab(tab) {
+    pheduyetSubTab = tab;
+    document.querySelectorAll("#pheduyetSubTabs .report-tab-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-subtab") === tab);
+    });
+    document.getElementById("pheduyetSubTabChua").style.display = tab === "chua" ? "block" : "none";
+    document.getElementById("pheduyetSubTabDa").style.display = tab === "da" ? "block" : "none";
+  }
+
+  function selectPheDuyetLan(lan) {
+    pheduyetLan = lan;
+    document.querySelectorAll("#pheduyetTabs .report-tab-btn").forEach(function (b) {
+      b.classList.toggle("active", parseInt(b.getAttribute("data-lan"), 10) === lan);
+    });
+    pheduyetChuaExpandedIndex = null;
+    pheduyetHistoryEditingOwn = false;
+    loadPheDuyetHistoryForRound();
+  }
+
+  function loadPheDuyetStatus() {
+    google.script.run
+      .withSuccessHandler(function (status) {
+        document.getElementById("pheduyetToggleLan1").checked = !!status.lan1;
+        document.getElementById("pheduyetToggleLan2").checked = !!status.lan2;
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được trạng thái"); })
+      .getPheDuyetStatus(token());
+  }
+
+  function togglePheDuyetStatus(lan, checked) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (!result.success) { alert(result.message); loadPheDuyetStatus(); return; }
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không thể cập nhật"); loadPheDuyetStatus(); })
+      .setPheDuyetStatus(token(), lan, checked);
+  }
+
+  function loadPheDuyetDeAnList() {
+    if (pheduyetDeAnListCache) { renderPheDuyetKhoaFilterOptions_(); renderPheDuyetChuaList(); return; }
+    google.script.run
+      .withSuccessHandler(function (list) {
+        pheduyetDeAnListCache = list || [];
+        renderPheDuyetKhoaFilterOptions_();
+        renderPheDuyetChuaList();
+      })
+      .withFailureHandler(function (error) { handleServerError(error, "Không tải được danh sách đề án được phân công"); })
+      .getPheDuyetDeAnList(token());
+  }
+
+  // Rieng cho Admin: xay dropdown loc theo tung Khoa/phong DUY NHAT tu pheduyetDeAnListCache
+  function renderPheDuyetKhoaFilterOptions_() {
+    const admin = session && String(session.vaiTro).trim() === "Admin";
+    if (!admin) return;
+    const select = document.getElementById("pdKhoaPhongFilter");
+    const currentValue = select.value;
+    const set = {};
+    (pheduyetDeAnListCache || []).forEach(function (item) { set[item.khoaphong] = true; });
+    const khoaList = Object.keys(set).sort(function (a, b) { return a.localeCompare(b, "vi", { sensitivity: "base" }); });
+    select.innerHTML = '<option value="">Tất cả khoa/phòng</option>' +
+      khoaList.map(function (k) { return '<option value="' + escapeAttr(k) + '"' + (k === currentValue ? " selected" : "") + '>' + escapeHtml(k) + '</option>'; }).join("");
+  }
+
+  // Tinh danh sach "Chua phe duyet": TVHĐ = de an ho CHUA nop o lan dang chon; Admin = de an
+  // CHUA DU 2 phieu o lan dang chon (dung dung logic voi so dem tab). Sau do loc them theo
+  // dropdown Khoa/phong neu la Admin va co chon.
+  function computePheDuyetChuaList_() {
+    const admin = session && String(session.vaiTro).trim() === "Admin";
+    const excludedDangkyIds = {};
+
+    if (admin) {
+      (pheduyetHistoryData || []).forEach(function (g) {
+        if (g.phieus.length >= 2) excludedDangkyIds[g.dangkyId] = true;
+      });
+    } else {
+      (pheduyetHistoryData || []).forEach(function (g) {
+        if (g.phieus.some(function (p) { return p.isOwn; })) excludedDangkyIds[g.dangkyId] = true;
+      });
+    }
+
+    let list = (pheduyetDeAnListCache || []).filter(function (item) {
+      return !(item.dangkyId && excludedDangkyIds[item.dangkyId]);
+    });
+
+    if (admin) {
+      const filterVal = document.getElementById("pdKhoaPhongFilter").value;
+      if (filterVal) list = list.filter(function (item) { return item.khoaphong === filterVal; });
+    }
+
+    list.sort(function (a, b) {
+      const c = a.khoaphong.localeCompare(b.khoaphong, "vi", { sensitivity: "base" });
+      if (c !== 0) return c;
+      return a.tendean.localeCompare(b.tendean, "vi", { sensitivity: "base" });
+    });
+
+    return list;
+  }
+
+  function renderPheDuyetChuaList() {
+    pheduyetChuaFilteredList = computePheDuyetChuaList_();
+    const listBox = document.getElementById("pheduyetChuaList");
+    document.getElementById("pheduyetEmptyNote").style.display = pheduyetChuaFilteredList.length === 0 ? "block" : "none";
+
+    if (pheduyetChuaFilteredList.length === 0) {
+      listBox.innerHTML = "";
+      document.getElementById("pheduyetChuaDetail").innerHTML = "";
+      document.getElementById("pheduyetChuaDetailPanel").classList.remove("open");
+      pheduyetChuaExpandedIndex = null;
+      updatePheDuyetTabCounts();
+      return;
+    }
+
+    // Neu de an dang mo khong con nam trong danh sach loc moi (vd Admin vua doi dropdown loc) -> dong lai
+    if (pheduyetChuaExpandedIndex !== null && pheduyetChuaExpandedIndex >= pheduyetChuaFilteredList.length) {
+      pheduyetChuaExpandedIndex = null;
+    }
+
+    let html = "";
+    pheduyetChuaFilteredList.forEach(function (item, i) {
+      const active = pheduyetChuaExpandedIndex === i ? " active" : "";
+      const label = item.tendean + " - " + item.khoaphong;
+      html += '<button type="button" class="dangky-history-btn' + active + '" onclick="togglePheDuyetChuaItem(' + i + ')">' + escapeHtml(label) + '</button>';
+    });
+    listBox.innerHTML = html;
+
+    if (pheduyetChuaExpandedIndex !== null) {
+      renderPheDuyetChuaDetail();
+    } else {
+      document.getElementById("pheduyetChuaDetail").innerHTML = "";
+      document.getElementById("pheduyetChuaDetailPanel").classList.remove("open");
+    }
+
+    updatePheDuyetTabCounts();
+  }
+
+  function togglePheDuyetChuaItem(index) {
+    pheduyetChuaExpandedIndex = (pheduyetChuaExpandedIndex === index) ? null : index;
+    renderPheDuyetChuaList();
+  }
+
+  // Bam vao 1 de an trong danh sach "Chua phe duyet" -> mo accordion chia doi File/Bang kiem
+  // ngay ben duoi (giong het kieu "Da phe duyet"), dung lai cac ham loadPheDuyetData/
+  // renderPheDuyetFormBox... hien co, chi doi noi render tu #pheduyetSplitView (cu, da bo) sang
+  // 1 khoi HTML duoc tao moi moi lan mo, nam trong chinh accordion nay.
+  function renderPheDuyetChuaDetail() {
+    const item = pheduyetChuaFilteredList[pheduyetChuaExpandedIndex];
+    const detailBox = document.getElementById("pheduyetChuaDetail");
+    const panel = document.getElementById("pheduyetChuaDetailPanel");
+    if (!item) { detailBox.innerHTML = ""; panel.classList.remove("open"); return; }
+    panel.classList.add("open");
+
+    pheduyetSelectedKhoa = item.khoaphong;
+    pheduyetSelectedMaDeAn = item.madean;
+    pheduyetSelectedTenDeAn = item.tendean;
+    pheduyetSelectedDangkyId = item.dangkyId;
+    pheduyetOwnEditing = false;
+
+    detailBox.innerHTML =
+      '<div class="pheduyet-split">' +
+        '<div class="card pheduyet-pane">' +
+          '<h3 style="margin-top:0;color:#1c47c6;">File đề án/sáng kiến</h3>' +
+          '<div id="pheduyetFileBox"></div>' +
+        '</div>' +
+        '<div class="card pheduyet-pane">' +
+          '<h3 style="margin-top:0;color:#1c47c6;" id="pheduyetFormTitle">Phiếu phê duyệt</h3>' +
+          '<div id="pheduyetFormBox"></div>' +
+        '</div>' +
+      '</div>';
+
+    loadPheDuyetData();
+  }
+
+  function loadPheDuyetData() {
+    document.getElementById("pheduyetFileBox").innerHTML = '<div class="empty">Đang tải...</div>';
+    document.getElementById("pheduyetFormBox").innerHTML = '<div class="empty">Đang tải...</div>';
+    pheduyetOwnEditing = false;
+
+    google.script.run
+      .withSuccessHandler(function (data) {
+        pheduyetCurrentData = data;
+        renderPheDuyetSplitView();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        document.getElementById("pheduyetFormBox").innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+        document.getElementById("pheduyetFileBox").innerHTML = "";
+      })
+      .getPheDuyetData(token(), pheduyetLan, pheduyetSelectedKhoa, pheduyetSelectedTenDeAn, pheduyetSelectedMaDeAn, pheduyetSelectedDangkyId);
+  }
+
+  function renderPheDuyetSplitView() {
+    const data = pheduyetCurrentData;
+    if (!data) return;
+
+    document.getElementById("pheduyetFormTitle").innerText = data.formTitle;
+    document.getElementById("pheduyetFileBox").innerHTML = renderPheDuyetFileBoxHtml_(data.fileUrl);
+    renderPheDuyetFormBox();
+  }
+
+  function extractDriveFileId_(url) {
+    const s = String(url || "");
+    let m = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+    return null;
+  }
+
+  function renderPheDuyetFileBoxHtml_(fileUrl) {
+    if (!fileUrl) {
+      return '<div class="empty" style="padding:10px 0;">Chưa có file đính kèm cho đề án/sáng kiến này ở lần phê duyệt này.</div>';
+    }
+    if (!/^https?:\/\//i.test(String(fileUrl).trim())) {
+      return '<div class="file-note" style="font-style:normal;padding:10px 0;">' + escapeHtml(fileUrl) + '</div>';
+    }
+    let html = '<a class="file-link" href="' + escapeAttr(fileUrl) + '" target="_blank" rel="noopener">Xem file đề án/sáng kiến</a>';
+    const fileId = extractDriveFileId_(fileUrl);
+    if (fileId) {
+      const previewUrl = "https://drive.google.com/file/d/" + fileId + "/preview";
+      html += '<div class="pheduyet-file-embed"><iframe src="' + escapeAttr(previewUrl) + '" allow="autoplay"></iframe></div>';
+    }
+    return html;
+  }
+
+  function sumArray_(arr) {
+    if (!Array.isArray(arr)) return 0;
+    let s = 0;
+    arr.forEach(function (v) { s += parseFloat(v) || 0; });
+    return Math.round(s * 10) / 10;
+  }
+
+  function renderPheDuyetScoreTableHtml(idPrefix, tieuChi, diemValues, readonly, totalOverride) {
+    let html = '<div class="table-wrapper"><table class="pheduyet-score-table"><thead><tr><th style="width:34px;">STT</th><th>Tiêu chí nhận xét</th><th>Điểm đạt được</th></tr></thead><tbody>';
+    tieuChi.forEach(function (text, i) {
+      const val = diemValues && diemValues[i] !== undefined ? diemValues[i] : "";
+      if (readonly) {
+        html += '<tr><td class="pheduyet-stt">' + (i + 1) + '</td><td>' + escapeHtml(text) + '</td><td>' + escapeHtml(String(val)) + ' / ' + PHEDUYET_MAX_DIEM_CLIENT + '</td></tr>';
+      } else {
+        html += '<tr><td class="pheduyet-stt">' + (i + 1) + '</td><td>' + escapeHtml(text) + '</td>' +
+          '<td class="pheduyet-diem-cell">' +
+            '<input type="number" autocomplete="off" min="0" max="' + PHEDUYET_MAX_DIEM_CLIENT + '" step="0.1" id="' + idPrefix + '_diem_' + i + '" value="' + escapeAttr(val) + '" oninput="recomputePheDuyetTotal(\'' + idPrefix + '\')">' +
+            '<div class="pheduyet-diem-hint">Tối đa ' + PHEDUYET_MAX_DIEM_CLIENT + ' điểm</div>' +
+          '</td></tr>';
+      }
+    });
+    const totalDisplay = readonly
+      ? (totalOverride !== undefined && totalOverride !== "" && totalOverride !== null ? totalOverride : sumArray_(diemValues))
+      : 0;
+    html += '<tr class="pheduyet-total-row"><td colspan="2">Tổng điểm</td><td><span class="pheduyet-total-value" id="' + idPrefix + '_total">' +
+      escapeHtml(String(totalDisplay)) + '</span> / ' + (tieuChi.length * PHEDUYET_MAX_DIEM_CLIENT) + '</td></tr>';
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function recomputePheDuyetTotal(idPrefix) {
+    let s = 0;
+    for (let i = 0; i < 10; i++) {
+      const el = document.getElementById(idPrefix + "_diem_" + i);
+      if (el) s += parseFloat(el.value) || 0;
+    }
+    const totalEl = document.getElementById(idPrefix + "_total");
+    if (totalEl) totalEl.innerText = Math.round(s * 10) / 10;
+  }
+
+  function renderPheDuyetFormBox() {
+    const data = pheduyetCurrentData;
+    const box = document.getElementById("pheduyetFormBox");
+
+    if (data.isAdmin) {
+      box.innerHTML = '<div class="empty">Tài khoản Admin chỉ xem, không chấm điểm. Xem chi tiết từng phiếu ở danh sách bên dưới.</div>';
+      return;
+    }
+
+    if (!data.isAssigned) {
+      box.innerHTML = '<div class="empty">Bạn không được phân công chấm đề án/sáng kiến này.</div>';
+      return;
+    }
+
+    if (data.ownPhieu && !pheduyetOwnEditing) {
+      let html = '<div class="file-note">Bạn đã nộp phiếu phê duyệt cho đề án/sáng kiến này.</div>';
+      html += renderPheDuyetScoreTableHtml("pdOwnView", data.tieuChi, data.ownPhieu.diem, true, data.ownPhieu.tongdiem);
+      html += '<div class="form-group"><label>Ý kiến nhận xét</label><div>' + (data.ownPhieu.ykien ? nl2br(data.ownPhieu.ykien) : '<span style="color:#999;">(không có)</span>') + '</div></div>';
+      html += '<div class="form-group"><label>Kết luận</label><div><b>' + escapeHtml(data.ownPhieu.ketluan) + '</b></div></div>';
+      if (data.canSubmit) {
+        html += '<button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;" onclick="enterPheDuyetEditMode()">Chỉnh sửa</button>';
+      } else if (data.blockedMessage) {
+        html += '<div class="file-note" style="color:var(--color-danger);">' + escapeHtml(data.blockedMessage) + '</div>';
+      }
+      box.innerHTML = html;
+      return;
+    }
+
+    if (!data.canSubmit && !data.ownPhieu) {
+      box.innerHTML = '<div class="empty">' + escapeHtml(data.blockedMessage || "Đề án/sáng kiến này hiện chưa mở đợt phê duyệt.") + '</div>';
+      return;
+    }
+
+    const diemValues = data.ownPhieu ? data.ownPhieu.diem : [];
+    let html = renderPheDuyetScoreTableHtml("pdForm", data.tieuChi, diemValues, false);
+
+    html += '<div class="form-group"><label>Ý kiến nhận xét</label><textarea id="pdFormYKien">' + escapeHtml(data.ownPhieu ? data.ownPhieu.ykien : "") + '</textarea></div>';
+
+    html += '<div class="form-group"><label>Kết luận</label>';
+    data.ketLuanOptions.forEach(function (opt) {
+      const checked = data.ownPhieu && data.ownPhieu.ketluan === opt ? "checked" : "";
+      html += '<label class="dangky-radio-option"><input type="radio" name="pdFormKetLuan" value="' + escapeAttr(opt) + '" ' + checked + '><span class="opt-label">' + escapeHtml(opt) + '</span></label>';
+    });
+    html += '</div>';
+
+    html += '<div style="display:flex;gap:10px;">';
+    if (data.ownPhieu) html += '<button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;" onclick="cancelPheDuyetEdit()">Hủy</button>';
+    html += '<button type="button" class="primary" style="width:auto;padding:10px 20px;" id="pdFormSaveBtn" onclick="savePheDuyetForm()">Lưu</button>';
+    html += '</div>';
+    html += '<div id="pheduyetFormMessage" class="msg"></div>';
+
+    box.innerHTML = html;
+
+    for (let i = 0; i < 10; i++) {
+      const el = document.getElementById("pdForm_diem_" + i);
+      if (el) el.value = (diemValues && diemValues[i] !== undefined) ? diemValues[i] : "";
+    }
+    const ykienEl = document.getElementById("pdFormYKien");
+    if (ykienEl) ykienEl.value = data.ownPhieu ? (data.ownPhieu.ykien || "") : "";
+
+    recomputePheDuyetTotal("pdForm");
+  }
+
+  function enterPheDuyetEditMode() { pheduyetOwnEditing = true; renderPheDuyetFormBox(); }
+  function cancelPheDuyetEdit() { pheduyetOwnEditing = false; renderPheDuyetFormBox(); }
+
+  function savePheDuyetForm() {
+    const diem = [];
+    for (let i = 0; i < 10; i++) {
+      const el = document.getElementById("pdForm_diem_" + i);
+      diem.push(el ? el.value : "");
+    }
+    const ykien = document.getElementById("pdFormYKien").value.trim();
+    const ketLuanEl = document.querySelector('input[name="pdFormKetLuan"]:checked');
+    const ketLuan = ketLuanEl ? ketLuanEl.value : "";
+
+    const msgBox = document.getElementById("pheduyetFormMessage");
+    msgBox.innerHTML = "";
+
+    if (!ketLuan) { msgBox.innerHTML = '<span class="error">Vui lòng chọn Kết luận.</span>'; return; }
+
+    const btn = document.getElementById("pdFormSaveBtn");
+    btn.disabled = true; btn.innerText = "Đang lưu...";
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        btn.disabled = false; btn.innerText = "Lưu";
+        if (!result.success) { msgBox.innerHTML = '<span class="error">' + escapeHtml(result.message) + '</span>'; return; }
+        // Sau khi nop thanh cong: de an nay se bien mat khoi "Chua phe duyet" (TVHĐ da nop) ->
+        // tai lai Lich su (se tu dong lam moi lai ca danh sach "Chua" thong qua chuoi goi ben duoi).
+        pheduyetOwnEditing = false;
+        loadPheDuyetHistoryForRound();
+      })
+      .withFailureHandler(function (error) {
+        btn.disabled = false; btn.innerText = "Lưu";
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        msgBox.innerHTML = '<span class="error">Có lỗi xảy ra: ' + escapeHtml(error.message) + '</span>';
+      })
+      .savePheDuyetPhieu(token(), pheduyetLan, {
+        maDeAn: pheduyetSelectedMaDeAn, khoaPhong: pheduyetSelectedKhoa, tenDeAn: pheduyetSelectedTenDeAn,
+        dangkyId: pheduyetSelectedDangkyId,
+        diem: diem, ykienNhanXet: ykien, ketLuan: ketLuan
+      });
+  }
+
+  // So dem "(xx/xx)" canh 2 tab con, tinh theo LAN dang chon.
+  function updatePheDuyetTabCounts() {
+    if (!pheduyetDeAnListCache) return;
+    const admin = session && String(session.vaiTro).trim() === "Admin";
+    const total = pheduyetDeAnListCache.length;
+    let daCount;
+    if (admin) {
+      daCount = (pheduyetHistoryData || []).filter(function (g) { return g.phieus.length >= 2; }).length;
+    } else {
+      daCount = (pheduyetHistoryData || []).length;
+    }
+    const chuaCount = total - daCount;
+
+    const btnChua = document.querySelector('#pheduyetSubTabs [data-subtab="chua"]');
+    const btnDa = document.querySelector('#pheduyetSubTabs [data-subtab="da"]');
+    if (btnChua) btnChua.innerText = "Chưa phê duyệt (" + chuaCount + "/" + total + ")";
+    if (btnDa) btnDa.innerText = "Đã phê duyệt (" + daCount + "/" + total + ")";
+  }
+
+  // Danh sach "Lich su phe duyet" - toan bo phieu cua LAN dang chon.
+  function loadPheDuyetHistoryForRound() {
+    const listBox = document.getElementById("pheduyetPhieuList");
+    listBox.innerHTML = '<div class="empty">Đang tải...</div>';
+    pheduyetHistoryExpandedIndex = null;
+    pheduyetHistorySelectedPhieuIndex = null;
+    pheduyetHistoryEditingOwn = false;
+    document.getElementById("pheduyetPhieuDetail").innerHTML = "";
+    document.getElementById("pheduyetDetailPanel").classList.remove("open");
+
+    google.script.run
+      .withSuccessHandler(function (data) {
+        pheduyetHistoryData = data || [];
+        renderPheDuyetPhieuList();
+        // Lam moi lai danh sach "Chua phe duyet" theo du lieu vua tai (loai bo de an vua nop)
+        if (pheduyetDeAnListCache) renderPheDuyetChuaList();
+        else updatePheDuyetTabCounts();
+      })
+      .withFailureHandler(function (error) {
+        if (isSessionExpiredError(error)) { listBox.innerHTML = ""; showSessionExpiredModal(); return; }
+        listBox.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      })
+      .getPheDuyetRoundHistory(token(), pheduyetLan);
+  }
+
+  function renderPheDuyetPhieuList() {
+    const listBox = document.getElementById("pheduyetPhieuList");
+
+    if (!pheduyetHistoryData || pheduyetHistoryData.length === 0) {
+      listBox.innerHTML = '<div class="empty">Chưa có phiếu phê duyệt nào.</div>';
+      return;
+    }
+
+    let html = "";
+    pheduyetHistoryData.forEach(function (g, i) {
+      const active = pheduyetHistoryExpandedIndex === i ? " active" : "";
+      const label = "Phiếu phê duyệt " + (i + 1) + " - " + g.khoaphong;
+      html += '<button type="button" class="dangky-history-btn' + active + '" onclick="togglePheDuyetPhieuDetail(' + i + ')">' + escapeHtml(label) + '</button>';
+    });
+    listBox.innerHTML = html;
+
+    if (pheduyetHistoryExpandedIndex !== null) renderPheDuyetPhieuDetail();
+  }
+
+  function togglePheDuyetPhieuDetail(index) {
+    pheduyetHistoryExpandedIndex = (pheduyetHistoryExpandedIndex === index) ? null : index;
+    pheduyetHistorySelectedPhieuIndex = null;
+    pheduyetHistoryEditingOwn = false;
+    renderPheDuyetPhieuList();
+  }
+
+  function renderPheDuyetPhieuDetail() {
+    const detailBox = document.getElementById("pheduyetPhieuDetail");
+    const panel = document.getElementById("pheduyetDetailPanel");
+    const g = pheduyetHistoryData[pheduyetHistoryExpandedIndex];
+    if (!g) { detailBox.innerHTML = ""; panel.classList.remove("open"); return; }
+    panel.classList.add("open");
+
+    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
+
+    let html = '<div class="dangky-detail-box"><h3 style="margin-top:0;color:var(--color-primary);">' +
+      escapeHtml(g.tendean) + ' <span style="color:var(--color-text-muted);font-weight:normal;">(' + escapeHtml(g.khoaphong) + ')</span></h3>';
+
+    html += '<div class="form-group"><label>File đề án/sáng kiến</label>' + renderPheDuyetFileBoxHtml_(g.fileUrl) + '</div>';
+
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;">';
+    if (isAdminAcc) {
+      g.phieus.forEach(function (p, pi) {
+        const active = pheduyetHistorySelectedPhieuIndex === pi ? " active" : "";
+        html += '<button type="button" class="dangky-history-btn' + active + '" onclick="selectPheDuyetHistoryPhieu(' + pi + ')">Phiếu phê duyệt của ' + escapeHtml(p.hoTen || "---") + '</button>';
+      });
+      if (g.phieus.length === 0) html += '<span style="color:var(--color-text-muted);">Chưa có phiếu phê duyệt nào cho đề án này.</span>';
+    } else {
+      const ownIndex = g.phieus.findIndex(function (p) { return p.isOwn; });
+      const otherIndex = g.phieus.findIndex(function (p) { return !p.isOwn; });
+      if (ownIndex !== -1) {
+        const active = pheduyetHistorySelectedPhieuIndex === ownIndex ? " active" : "";
+        html += '<button type="button" class="dangky-history-btn' + active + '" onclick="selectPheDuyetHistoryPhieu(' + ownIndex + ')">Phiếu phê duyệt của thầy/cô</button>';
+      }
+      if (otherIndex !== -1) {
+        const active = pheduyetHistorySelectedPhieuIndex === otherIndex ? " active" : "";
+        html += '<button type="button" class="dangky-history-btn' + active + '" onclick="selectPheDuyetHistoryPhieu(' + otherIndex + ')">Phiếu phê duyệt của Người chấm còn lại</button>';
+      } else {
+        html += '<button type="button" class="dangky-history-btn" disabled style="opacity:0.5;cursor:not-allowed;" title="Người chấm còn lại chưa nộp phiếu">Phiếu phê duyệt của Người chấm còn lại (chưa nộp)</button>';
+      }
+    }
+    html += '</div>';
+
+    html += '<div id="pheduyetHistoryPhieuBox"></div>';
+    html += '</div>';
+    detailBox.innerHTML = html;
+
+    if (pheduyetHistorySelectedPhieuIndex !== null) renderPheDuyetHistoryPhieuBox();
+  }
+
+  function selectPheDuyetHistoryPhieu(phieuIndex) {
+    pheduyetHistorySelectedPhieuIndex = phieuIndex;
+    pheduyetHistoryEditingOwn = false;
+    renderPheDuyetPhieuDetail();
+  }
+
+  // Hien phieu da chon (chi xem), HOAC ve form Chinh sua ngay tai cho neu la phieu CUA CHINH
+  // MINH (TVHĐ) VA g.canEditOwn = true (Admin dang mo lan nay + Trang thai o Phan cong con khop)
+  // VA nguoi dung dang o che do Sua (pheduyetHistoryEditingOwn).
+  function renderPheDuyetHistoryPhieuBox() {
+    const box = document.getElementById("pheduyetHistoryPhieuBox");
+    if (!box) return;
+    const g = pheduyetHistoryData[pheduyetHistoryExpandedIndex];
+    const p = g && g.phieus[pheduyetHistorySelectedPhieuIndex];
+    if (!p) { box.innerHTML = ""; return; }
+
+    if (p.isOwn && g.canEditOwn && pheduyetHistoryEditingOwn) {
+      let html = renderPheDuyetScoreTableHtml("pdHistEdit", g.tieuChi, p.diem, false);
+      html += '<div class="form-group"><label>Ý kiến nhận xét</label><textarea id="pdHistEditYKien">' + escapeHtml(p.ykien) + '</textarea></div>';
+      html += '<div class="form-group"><label>Kết luận</label>';
+      g.ketLuanOptions.forEach(function (opt) {
+        const checked = p.ketluan === opt ? "checked" : "";
+        html += '<label class="dangky-radio-option"><input type="radio" name="pdHistEditKetLuan" value="' + escapeAttr(opt) + '" ' + checked + '><span class="opt-label">' + escapeHtml(opt) + '</span></label>';
+      });
+      html += '</div>';
+      html += '<div style="display:flex;gap:10px;">' +
+        '<button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;" onclick="cancelPheDuyetHistoryEdit()">Hủy</button>' +
+        '<button type="button" class="primary" style="width:auto;padding:10px 20px;" id="pdHistEditSaveBtn" onclick="savePheDuyetHistoryEdit()">Lưu</button>' +
+        '</div>';
+      html += '<div id="pheduyetHistoryEditMessage" class="msg"></div>';
+      box.innerHTML = html;
+      recomputePheDuyetTotal("pdHistEdit");
+      return;
+    }
+
+    let html = renderPheDuyetScoreTableHtml("pdHist" + pheduyetHistoryExpandedIndex + "_" + pheduyetHistorySelectedPhieuIndex, g.tieuChi, p.diem, true, p.tongdiem);
+    html += '<div class="form-group"><label>Ý kiến nhận xét</label><div>' + (p.ykien ? nl2br(p.ykien) : '<span style="color:#999;">(không có)</span>') + '</div></div>';
+    html += '<div class="form-group"><label>Kết luận</label><div><b>' + escapeHtml(p.ketluan) + '</b></div></div>';
+    html += '<div class="file-note">Thời gian nộp: ' + escapeHtml(p.thoigian) + '</div>';
+    if (p.isOwn && g.canEditOwn) {
+      html += '<button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;margin-top:10px;" onclick="enterPheDuyetHistoryEdit()">Chỉnh sửa</button>';
+    }
+    box.innerHTML = html;
+  }
+
+  function enterPheDuyetHistoryEdit() { pheduyetHistoryEditingOwn = true; renderPheDuyetHistoryPhieuBox(); }
+  function cancelPheDuyetHistoryEdit() { pheduyetHistoryEditingOwn = false; renderPheDuyetHistoryPhieuBox(); }
+
+  function savePheDuyetHistoryEdit() {
+    const g = pheduyetHistoryData[pheduyetHistoryExpandedIndex];
+    const diem = [];
+    for (let i = 0; i < 10; i++) {
+      const el = document.getElementById("pdHistEdit_diem_" + i);
+      diem.push(el ? el.value : "");
+    }
+    const ykien = document.getElementById("pdHistEditYKien").value.trim();
+    const ketLuanEl = document.querySelector('input[name="pdHistEditKetLuan"]:checked');
+    const ketLuan = ketLuanEl ? ketLuanEl.value : "";
+
+    const msgBox = document.getElementById("pheduyetHistoryEditMessage");
+    msgBox.innerHTML = "";
+    if (!ketLuan) { msgBox.innerHTML = '<span class="error">Vui lòng chọn Kết luận.</span>'; return; }
+
+    const btn = document.getElementById("pdHistEditSaveBtn");
+    btn.disabled = true; btn.innerText = "Đang lưu...";
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        btn.disabled = false; btn.innerText = "Lưu";
+        if (!result.success) { msgBox.innerHTML = '<span class="error">' + escapeHtml(result.message) + '</span>'; return; }
+        pheduyetHistoryEditingOwn = false;
+        loadPheDuyetHistoryForRound();
+      })
+      .withFailureHandler(function (error) {
+        btn.disabled = false; btn.innerText = "Lưu";
+        if (isSessionExpiredError(error)) { showSessionExpiredModal(); return; }
+        msgBox.innerHTML = '<span class="error">Có lỗi xảy ra: ' + escapeHtml(error.message) + '</span>';
+      })
+      .savePheDuyetPhieu(token(), pheduyetLan, {
+        maDeAn: g.madean, khoaPhong: g.khoaphong, tenDeAn: g.tendean, dangkyId: g.dangkyId,
+        diem: diem, ykienNhanXet: ykien, ketLuan: ketLuan
+      });
+  }
+
+  // ==========================================================
+  // ESCAPE HTML
+  // ==========================================================
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+  function escapeAttr(value) { return escapeHtml(value); }
+
+
+
+
+  function nl2br(value) {
+    return escapeHtml(value).replace(/\r\n|\r|\n/g, "<br>");
+  }
+</script>
