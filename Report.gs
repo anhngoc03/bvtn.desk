@@ -318,3 +318,205 @@ function getReportPheDuyetStats(token) {
    details: details
  };
 }
+
+
+
+
+/**
+* Bao cao (3): Ket qua phe duyet - CHI tinh de an/sang kien dang ky NAM HIEN TAI (giong het pham
+* vi Bao cao 1/2). Nguon du lieu CHINH: Sheet DS_Deansangkien - noi da co san NC1/NC2/Diem TB
+* moi lan (tinh sang boi cong thuc co san trong Sheet, khong can doc lai Phe_duyet_lan1/lan2 va
+* tu ghep NC1/NC2 - nhanh hon nhieu). Rieng bieu do cot diem trung binh tung tieu chi BAT BUOC
+* phai doc rieng 2 Sheet Phe_duyet_lan1/lan2, vi diem tung tieu chi (Diem1..Diem10) KHONG duoc
+* luu lai o DS_Deansangkien (Sheet do chi co Tong diem/Diem TB, khong co diem tung tieu chi).
+*
+* QUY UOC (thieu du lieu -> hien "-", ap dung DOC LAP tung o, khong phai tat-ca-hoac-khong-gi):
+* - NC1/NC2: neu o tuong ung trong Sheet dang trong (chua cham) -> hien "-".
+* - Diem lech / Diem TB: CHI tinh khi CA HAI NC1 va NC2 deu da co gia tri; thieu 1 trong 2 ->
+*   ca hai o Diem lech va Diem TB deu hien "-" (khong dung truc tiep gia tri Diem_TB_lan1/lan_2
+*   co san trong Sheet cho truong hop nay, de dam bao nhat quan voi quy tac "chua du 2 phieu").
+* - Duyet_Khongduyet: gia tri dung DUNG BANG "Duyệt" hoac "Không duyệt" (dung ten cot co san);
+*   bat ky gia tri nao khac (rong, dang cho...) deu duoc xem la "chua co ket qua" va bi LOAI KHOI
+*   MAU SO tinh % o khoi "Tong ket" (van hien trong danh sach chi tiet voi cot Ket qua = "-").
+*/
+function getReportPheDuyetKetQua(token) {
+ const user = requireUser(token);
+ if (!canAccessBaoCao(user)) {
+   throw new Error("Bạn không có quyền xem báo cáo.");
+ }
+
+
+
+
+ const now = new Date();
+ const currentYear = now.getFullYear();
+ const prevYear = currentYear - 1;
+
+
+
+
+ const deanData = getSheetData(CONFIG.SHEET_DEAN);
+ const inScope = [];
+ if (deanData.length >= 2) {
+   const map = headerIndexMap(deanData[0]);
+   if (("Madean_sangkien" in map) && ("Khoaphong" in map) && ("Tendean" in map)) {
+     function numOrBlank_(row, key) {
+       if (!(key in map)) return "";
+       const v = row[map[key]];
+       if (v === "" || v === null || v === undefined) return "";
+       const n = parseFloat(v);
+       return isNaN(n) ? "" : n;
+     }
+     deanData.slice(1).forEach(function (row) {
+       const madean = String(row[map["Madean_sangkien"]] || "").trim();
+       if (!madean) return;
+       const group = classifyMaDeAn_(madean, currentYear, prevYear);
+       if (group !== "newDeAn" && group !== "sangKien") return;
+       inScope.push({
+         madean: madean,
+         khoaphong: String(row[map["Khoaphong"]] || "").trim(),
+         tendean: String(row[map["Tendean"]] || "").trim(),
+         loai: group === "newDeAn" ? "ĐA" : "SK",
+         nc1Lan1: numOrBlank_(row, "Diem_cua_NC1"),
+         nc2Lan1: numOrBlank_(row, "Diem_cua_NC2"),
+         nc1Lan2: numOrBlank_(row, "Diem_cua_NC1_lan_2"),
+         nc2Lan2: numOrBlank_(row, "Diem_cua_NC2_lan_2"),
+         duyetKhongDuyet: "Duyet_Khongduyet" in map ? String(row[map["Duyet_Khongduyet"]] || "").trim() : ""
+       });
+     });
+   }
+ }
+
+
+
+
+ // Xay 1 dong Danh sach chi tiet cho 1 lan cu the - Diem lech/Diem TB CHI tinh khi ca 2 deu co
+ function buildDetailRow_(item, nc1, nc2) {
+   const hasBoth = nc1 !== "" && nc2 !== "";
+   return {
+     khoaphong: item.khoaphong,
+     tendean: item.tendean,
+     nc1: nc1 === "" ? "-" : nc1,
+     nc2: nc2 === "" ? "-" : nc2,
+     diemLech: hasBoth ? Math.round(Math.abs(nc1 - nc2) * 10) / 10 : "-",
+     diemTB: hasBoth ? Math.round(((nc1 + nc2) / 2) * 10) / 10 : "-",
+     loai: item.loai
+   };
+ }
+
+
+
+
+ function sortDetails_(list) {
+   list.sort(function (a, b) {
+     const c = a.khoaphong.localeCompare(b.khoaphong, "vi", { sensitivity: "base" });
+     if (c !== 0) return c;
+     return a.tendean.localeCompare(b.tendean, "vi", { sensitivity: "base" });
+   });
+   return list;
+ }
+
+
+
+
+ const detailsLan1 = sortDetails_(inScope.map(function (item) { return buildDetailRow_(item, item.nc1Lan1, item.nc2Lan1); }));
+ const detailsLan2 = sortDetails_(inScope.map(function (item) { return buildDetailRow_(item, item.nc1Lan2, item.nc2Lan2); }));
+
+
+
+
+ // Phan nhom Diem lech (rieng Lan 2) - CHI tinh tren de an DA DU 2 phieu (Diem lech khac "-").
+ // "01-10" duoc hieu bao gom ca 0 (truong hop 2 nguoi cham diem giong het nhau).
+ const diemLechBuckets = [
+   { label: "Từ 01 đến 10 điểm", min: 0, max: 10, count: 0 },
+   { label: "Từ 11 đến 20 điểm", min: 11, max: 20, count: 0 },
+   { label: "Từ 21 đến 50 điểm", min: 21, max: 50, count: 0 },
+   { label: "Trên 50 điểm", min: 51, max: Infinity, count: 0 }
+ ];
+ let tongCoDiemLech = 0;
+ detailsLan2.forEach(function (row) {
+   if (row.diemLech === "-") return;
+   tongCoDiemLech++;
+   const bucket = diemLechBuckets.find(function (b) { return row.diemLech >= b.min && row.diemLech <= b.max; });
+   if (bucket) bucket.count++;
+ });
+ const diemLechGroups = diemLechBuckets.map(function (b) {
+   return { label: b.label, count: b.count, percent: tongCoDiemLech > 0 ? Math.round((b.count / tongCoDiemLech) * 1000) / 10 : 0 };
+ });
+
+
+
+
+ // Diem trung binh tung tieu chi (Lan 1 va Lan 2), tach rieng DA va SK - phai doc rieng
+ // Phe_duyet_lan1/lan2 vi diem tung tieu chi khong luu o DS_Deansangkien.
+ function tieuChiAveragesForSheet_(sheetName) {
+   const data = getSheetData(sheetName);
+   const sums = { DA: new Array(10).fill(0), SK: new Array(10).fill(0) };
+   const counts = { DA: 0, SK: 0 };
+   if (data.length >= 2) {
+     const map = headerIndexMap(data[0]);
+     if ("Madean" in map) {
+       data.slice(1).forEach(function (row) {
+         const madean = String(row[map["Madean"]] || "").trim();
+         if (!madean) return;
+         const group = classifyMaDeAn_(madean, currentYear, prevYear);
+         if (group !== "newDeAn" && group !== "sangKien") return;
+         const loai = group === "newDeAn" ? "DA" : "SK";
+         counts[loai]++;
+         for (let i = 1; i <= 10; i++) {
+           const key = "Diem" + i;
+           sums[loai][i - 1] += key in map ? (parseFloat(row[map[key]]) || 0) : 0;
+         }
+       });
+     }
+   }
+   function avgList_(loai, labels) {
+     const n = counts[loai];
+     return labels.map(function (label, i) {
+       return { label: label, avg: n > 0 ? Math.round((sums[loai][i] / n) * 100) / 100 : 0 };
+     });
+   }
+   return { da: avgList_("DA", PHEDUYET_TIEUCHI_DA), sk: avgList_("SK", PHEDUYET_TIEUCHI_SK) };
+ }
+
+
+
+
+ const tieuChiLan1 = tieuChiAveragesForSheet_(CONFIG.SHEET_PHEDUYET_LAN1);
+ const tieuChiLan2 = tieuChiAveragesForSheet_(CONFIG.SHEET_PHEDUYET_LAN2);
+
+
+
+
+ // Khoi "Tong ket" - Duyet/Khong duyet dua tren cot Duyet_Khongduyet (da chot san trong Sheet).
+ // De an chua co gia tri hop le (rong/dang cho) bi LOAI KHOI MAU SO % nhung VAN hien trong
+ // danh sach chi tiet (cot Ket qua = "-").
+ let soDuyet = 0, soKhongDuyet = 0;
+ const tongKetDetails = sortDetails_(inScope.map(function (item) {
+   const kq = item.duyetKhongDuyet;
+   if (kq === "Duyệt") soDuyet++;
+   else if (kq === "Không duyệt") soKhongDuyet++;
+   return { khoaphong: item.khoaphong, tendean: item.tendean, ketqua: (kq === "Duyệt" || kq === "Không duyệt") ? kq : "-" };
+ }));
+ const tongCoKetQua = soDuyet + soKhongDuyet;
+ function pctKetQua_(n) { return tongCoKetQua > 0 ? Math.round((n / tongCoKetQua) * 1000) / 10 : 0; }
+
+
+
+
+ return {
+   currentYear: currentYear,
+   detailsLan1: detailsLan1,
+   detailsLan2: detailsLan2,
+   diemLechGroups: diemLechGroups,
+   tieuChiLan1: tieuChiLan1,
+   tieuChiLan2: tieuChiLan2,
+   tongKet: {
+     items: [
+       { label: "Số đề án, sáng kiến được duyệt", count: soDuyet, percent: pctKetQua_(soDuyet) },
+       { label: "Số đề án, sáng kiến không được duyệt", count: soKhongDuyet, percent: pctKetQua_(soKhongDuyet) }
+     ],
+     details: tongKetDetails
+   }
+ };
+}
