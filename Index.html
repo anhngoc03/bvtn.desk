@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<?!= include('Stylesheet'); ?>
+</head>
+<body>
+
+
+
+
+<!-- ============ APP SHELL (Topbar + Sidebar) - GIAI DOAN 1: chi active o man Menu/Dang ky/Tra cuu.
+    Cac man con lai van dung header rieng cu, se chuyen dan o Giai doan 2. Khong di chuyen bat ky
+    node man hinh nao - Shell chi la lop topbar/sidebar co dinh phia tren, dieu khien bang CSS
+    qua class "shell-mode" tren <body>. ============ -->
+<div class="app-shell" id="appShell">
+<aside class="app-sidebar" id="appSidebar">
+  <div class="app-sidebar-brand">HỆ THỐNG ĐỀ ÁN,<br>SÁNG KIẾN CẢI TIẾN<br>CHẤT LƯỢNG</div>
+  <nav class="app-sidebar-nav" id="sidebarNav"></nav>
+</aside>
+<header class="app-topbar">
+  <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebarDrawer()" aria-label="Mở menu">☰</button>
+  <div class="app-topbar-title" id="topbarTitle">Trang chủ</div>
+  <div class="app-topbar-user">
+    <div class="app-topbar-user-info">
+      <div id="shellUserName"></div>
+      <div id="shellUserEmail"></div>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</header>
+</div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebarDrawer()"></div>
+
+
+
+
+<!-- ============ LOGIN ============ -->
+<div id="screen-login" class="screen active">
+<div class="login-box">
+  <div class="login-title">
+    <h2>HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN<br>CẢI TIẾN CHẤT LƯỢNG</h2>
+    <p>Đăng nhập hệ thống</p>
+  </div>
+  <div class="form-group">
+    <label for="loginEmail">Email</label>
+    <input type="email" id="loginEmail" placeholder="Nhập email" autocomplete="username">
+  </div>
+  <div class="form-group">
+    <label for="loginPassword">Mật khẩu</label>
+    <div class="password-field-wrap">
+      <input type="password" id="loginPassword" placeholder="Nhập mật khẩu" autocomplete="current-password">
+      <button type="button" class="password-toggle-btn" onclick="toggleLoginPasswordVisibility(this)" aria-label="Hiện/ẩn mật khẩu">👁</button>
+    </div>
+  </div>
+  <button class="primary" id="loginBtn" onclick="doLogin()">Đăng nhập</button>
+  <div id="loginMessage" class="msg"></div>
+
+
+
+
+  <div class="login-note">
+    <p>✧ Lưu ý: <b>Hệ thống hiện đang trong quá trình xây dựng và hoàn thiện</b> nên một số chức năng có thể chưa hoạt động ổn định. Mỗi phiên đăng nhập hiện được duy trì tối đa 06 giờ kể từ thời điểm đăng nhập.</p>
+    <p>✧ Để hạn chế tình trạng này, <b>khi không sử dụng hệ thống, người dùng nên đăng xuất và đóng tab</b>. Khi cần tiếp tục sử dụng, vui lòng đăng nhập lại.</p>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ MENU ============ -->
+<div id="screen-menu" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="menuUserName">Đang tải...</div><div id="menuUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container shell-welcome-container">
+  <div class="shell-welcome-panel">
+    <h2>Xin chào, <span id="welcomeName"></span>!</h2>
+    <p>Chọn một chức năng ở thanh điều hướng bên trái để bắt đầu.</p>
+  </div>
+  <!-- Giu lai de renderMenuCards() (khong con duoc goi o Giai doan 1 tro di) khong bao loi neu con noi nao goi lai -->
+  <div class="menu" id="menuContainer" style="display:none;"></div>
+</div>
+</div>
+
+
+
+
+<!-- ============ DANG KY ============ -->
+<div id="screen-dangky" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="dangkyUserName"></div><div id="dangkyUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div id="dangkyDeadlineBanner" class="deadline-banner"></div>
+  <div class="page-title">
+    <h2>PHIẾU ĐĂNG KÝ ĐỀ ÁN/ SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG NĂM <span id="dangkyYear"></span></h2>
+  </div>
+
+
+
+
+  <div class="card">
+    <h3 style="margin-top:0;color:#1c47c6;">Một số biểu mẫu cần tuân thủ</h3>
+    <div id="dangkyTemplateLinks"><div class="empty">Đang tải...</div></div>
+  </div>
+
+
+
+
+  <!-- Chi Admin thay va chinh duoc -->
+  <div class="card" id="dangkyAdminToggles" style="display:none;">
+    <h3 style="margin-top:0;color:#1c47c6;">Quản lý nhận đăng ký (chỉ Admin)</h3>
+    <div id="dangkyToggleList"></div>
+  </div>
+
+
+
+
+  <div class="form-box">
+    <div class="form-group">
+      <label>1. Họ và tên người liên lạc (khi cần) <span class="required">*</span></label>
+      <input type="text" id="dkHoTen">
+    </div>
+    <div class="form-group">
+      <label>2. Email người liên lạc (khi cần) <span class="required">*</span></label>
+      <input type="text" id="dkEmail">
+    </div>
+    <div class="form-group">
+      <label>3. Số điện thoại người liên lạc (khi cần) <span class="required">*</span></label>
+      <input type="text" id="dkSoDienThoai">
+    </div>
+
+
+
+
+    <div class="form-group">
+      <label>4. Trạng thái sáng kiến/đề án cải tiến chất lượng của khoa/phòng <span class="required">*</span></label>
+      <div id="dangkyLoaiOptions"></div>
+      <div class="file-note">Vui lòng chỉ điền thông tin vào một phần mà khoa/phòng muốn đăng ký. Trường hợp muốn đăng ký nhiều phần, vui lòng nộp nhiều phiếu tương ứng.</div>
+    </div>
+
+
+
+
+    <div id="dangkySectionFields"></div>
+
+
+
+
+    <button class="primary" id="dangkySubmitBtn" onclick="submitDangKyForm()" style="display:none;">Nộp phiếu đăng ký</button>
+    <div id="dangkyMessage" class="msg"></div>
+  </div>
+
+
+
+
+  <div class="history-box">
+    <h3 style="margin-top:0;color:#1c47c6;">Lịch sử đăng ký</h3>
+    <div class="form-group" id="dangkyHistoryFilterBox" style="display:none;">
+      <label for="dangkyHistoryKhoaFilter">Lọc theo khoa/phòng</label>
+      <select id="dangkyHistoryKhoaFilter" onchange="onDangKyHistoryFilterChange()">
+        <option value="">Tất cả khoa/phòng</option>
+      </select>
+    </div>
+    <div class="dangky-history-list" id="dangkyHistoryList"></div>
+    <div class="accordion-panel" id="dangkyDetailPanel">
+      <div class="accordion-panel-inner">
+        <div id="dangkyHistoryDetail"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ PHE DUYET ============ -->
+<div id="screen-pheduyet" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="pheduyetUserName"></div><div id="pheduyetUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div id="pheduyetDeadlineBanner" class="deadline-banner"></div>
+  <div class="page-title">
+    <h2>Phê duyệt</h2>
+    <p>Phê duyệt đề án, sáng kiến cải tiến chất lượng.</p>
+  </div>
+
+
+  <div class="card">
+    <h3 style="margin-top:0;color:#1c47c6;">Một số biểu mẫu cần tuân thủ</h3>
+    <div id="pheduyetTemplateLinks"><div class="empty">Đang tải...</div></div>
+  </div>
+
+
+  <div class="report-tabs" id="pheduyetTabs">
+    <button type="button" class="report-tab-btn" data-lan="1" onclick="selectPheDuyetLan(1)">PHÊ DUYỆT LẦN 1</button>
+    <button type="button" class="report-tab-btn" data-lan="2" onclick="selectPheDuyetLan(2)">PHÊ DUYỆT LẦN 2</button>
+  </div>
+
+
+  <div class="card" id="pheduyetAdminToggle" style="display:none;">
+    <h3 style="margin-top:0;color:#1c47c6;">Quản lý nhận phản hồi phê duyệt (chỉ Admin)</h3>
+    <div class="dangky-toggle-row">
+      <span class="lbl">Nhận phê duyệt lần 1</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="pheduyetToggleLan1" onchange="togglePheDuyetStatus(1, this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="dangky-toggle-row">
+      <span class="lbl">Nhận phê duyệt lần 2</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="pheduyetToggleLan2" onchange="togglePheDuyetStatus(2, this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+
+  <div class="report-tabs" id="pheduyetSubTabs" style="margin-top:10px;">
+    <button type="button" class="report-tab-btn active" data-subtab="chua" onclick="selectPheDuyetSubTab('chua')">Chưa phê duyệt</button>
+    <button type="button" class="report-tab-btn" data-subtab="da" onclick="selectPheDuyetSubTab('da')">Đã phê duyệt</button>
+  </div>
+
+
+  <div id="pheduyetSubTabChua">
+    <div class="card" id="pheduyetChuaFilterBox" style="display:none;">
+      <div class="form-group">
+        <label for="pdKhoaPhongFilter">Lọc theo khoa/phòng (chỉ Admin)</label>
+        <select id="pdKhoaPhongFilter" onchange="renderPheDuyetChuaList()">
+          <option value="">Tất cả khoa/phòng</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="pheduyetEmptyNote" class="empty" style="display:none;">Không có đề án/sáng kiến nào cần phê duyệt.</div>
+
+    <div class="dangky-history-list" id="pheduyetChuaList"></div>
+    <div class="accordion-panel" id="pheduyetChuaDetailPanel">
+      <div class="accordion-panel-inner">
+        <div id="pheduyetChuaDetail"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="pheduyetSubTabDa" style="display:none;">
+    <div class="history-box">
+      <h3 style="margin-top:0;color:#1c47c6;">Lịch sử phê duyệt</h3>
+      <p class="file-note" style="margin-top:0;">Toàn bộ phiếu phê duyệt của lần đang chọn.</p>
+      <div class="dangky-history-list" id="pheduyetPhieuList"></div>
+      <div class="accordion-panel" id="pheduyetDetailPanel">
+        <div class="accordion-panel-inner">
+          <div id="pheduyetPhieuDetail"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ SEARCH ============ -->
+<div id="screen-search" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="searchUserName"></div><div id="searchUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div class="page-title">
+    <h2>Tra cứu thông tin đề án, sáng kiến</h2>
+    <p>Chọn khoa/phòng và đề án/sáng kiến cần tra cứu.</p>
+  </div>
+  <div class="search-box">
+    <div class="form-group">
+      <label for="searchKhoaPhong">Khoa/phòng</label>
+      <select id="searchKhoaPhong" onchange="loadSearchDeAn()">
+        <option value="">-- Chọn khoa/phòng --</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="searchTenDeAn">Tên đề án/sáng kiến</label>
+      <select id="searchTenDeAn" onchange="loadSearchDetail()" disabled>
+        <option value="">-- Chọn đề án/sáng kiến --</option>
+      </select>
+    </div>
+  </div>
+  <div id="searchResult" class="result-box">
+    <div class="empty">Chưa có thông tin.</div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ PROGRESS ============ -->
+<div id="screen-progress" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="progressUserName"></div><div id="progressUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div id="progressDeadlineBanner" class="deadline-banner"></div>
+  <div class="page-title">
+    <h2>Cập nhật tiến độ thực hiện đề án/sáng kiến</h2>
+    <p>Cập nhật tình hình thực hiện đề án/sáng kiến theo thời gian.</p>
+  </div>
+
+
+
+
+  <div class="form-box">
+    <div class="form-group">
+      <label for="pKhoaPhong">Khoa/phòng <span class="required">*</span></label>
+      <select id="pKhoaPhong" onchange="loadProgressDeAn()">
+        <option value="">-- Chọn khoa/phòng --</option>
+      </select>
+    </div>
+
+
+
+
+    <div class="form-group">
+      <label for="pTenDeAn">Tên đề án/sáng kiến <span class="required">*</span></label>
+      <select id="pTenDeAn" onchange="selectProgressDeAn()" disabled>
+        <option value="">-- Chọn đề án/sáng kiến --</option>
+      </select>
+    </div>
+
+
+
+
+    <div class="form-group">
+      <label for="pMaDeAn">Mã đề án/sáng kiến</label>
+      <input type="text" id="pMaDeAn" readonly placeholder="Tự động điền theo đề án đã chọn">
+    </div>
+
+
+
+
+    <div class="form-group">
+      <label for="pTrangThai">Trạng thái <span class="required">*</span></label>
+      <select id="pTrangThai">
+        <option value="">-- Chọn trạng thái --</option>
+        <option>Đang thu thập số liệu</option>
+        <option>Đang thực hiện</option>
+        <option>Đang viết báo cáo</option>
+        <option>Đang nghiệm thu</option>
+        <option>Đã hoàn thành nghiệm thu</option>
+      </select>
+    </div>
+
+
+
+
+    <div class="form-group">
+      <label for="pNoiDung">Nội dung công việc cụ thể đang thực hiện <span class="required">*</span></label>
+      <textarea id="pNoiDung" placeholder="Ví dụ:
+&quot;Đang thực hiện: Đang tổ chức lớp đào tạo cho nhân viên&quot;
+&quot;Đang thu thập số liệu: Đã thu thập được 20/50 mẫu&quot;"></textarea>
+    </div>
+
+
+
+
+    <!-- Chi hien khi de an duoc chon co ma bat dau bang "ĐA" -->
+    <div class="form-group chiso-box" id="pChiSoSection" style="display:none;">
+      <label>Cập nhật tiến độ đo lường</label>
+      <div class="table-wrapper">
+        <table class="chiso-table" id="pChiSoTable">
+          <thead><tr><th>Tên chỉ số</th><th>Kết quả đo lường hiện tại</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+
+
+
+    <div class="form-group">
+      <label for="pFile">File minh chứng (không bắt buộc)</label>
+      <input type="file" id="pFile" multiple style="display:none" onchange="handleFileSelect(event)">
+      <button type="button" class="secondary-btn" onclick="document.getElementById('pFile').click()">+ Chọn file</button>
+      <div id="pFileList" class="file-chip-list"></div>
+      <div class="file-note">Có thể chọn tối đa 5 file/ảnh cùng lúc.</div>
+    </div>
+
+
+
+
+    <div class="form-group">
+      <label>Email</label>
+      <input type="text" id="pEmail" readonly>
+    </div>
+
+
+
+
+    <button class="primary" id="pUpdateBtn" onclick="submitProgress()">Cập nhật</button>
+    <div id="progressMessage" class="msg"></div>
+  </div>
+
+
+
+
+  <div class="history-box">
+    <h3 style="margin-top:0;color:#1c47c6;">Lịch sử cập nhật tiến độ</h3>
+    <div id="progressHistory"><div class="empty">Chưa có thông tin.</div></div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ NGHIEM THU ============ -->
+<div id="screen-nghiemthu" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="nghiemthuUserName"></div><div id="nghiemthuUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div id="nghiemthuDeadlineBanner" class="deadline-banner"></div>
+  <div class="page-title">
+    <h2>Nghiệm thu</h2>
+    <p>Đánh giá hiệu quả đề án, sáng kiến cải tiến (dành cho Thành viên Hội đồng).</p>
+  </div>
+
+
+  <div class="card">
+    <div class="form-group">
+      <label for="ntKhoaPhong">Khoa/phòng</label>
+      <select id="ntKhoaPhong" onchange="loadNghiemThuDeAnByKhoa()">
+        <option value="">-- Chọn khoa/phòng --</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="ntTenDeAn">Tên đề án/sáng kiến</label>
+      <select id="ntTenDeAn" onchange="selectNghiemThuDeAn()" disabled>
+        <option value="">-- Chọn đề án/sáng kiến --</option>
+      </select>
+    </div>
+    <div id="nghiemthuEmptyNote" class="empty" style="display:none;">Chưa có đề án/sáng kiến nào được phân công cho tài khoản này.</div>
+  </div>
+
+
+  <div id="nghiemthuSplitView" style="display:none;">
+    <div class="pheduyet-split">
+      <div class="card pheduyet-pane">
+        <h3 style="margin-top:0;color:#1c47c6;">File báo cáo nghiệm thu</h3>
+        <div id="nghiemthuFileBox"></div>
+      </div>
+      <div class="card pheduyet-pane">
+        <h3 style="margin-top:0;color:#1c47c6;" id="nghiemthuFormTitle">Bảng kiểm nghiệm thu</h3>
+        <div id="nghiemthuFormBox"></div>
+      </div>
+    </div>
+
+
+    <div class="history-box">
+      <h3 style="margin-top:0;color:#1c47c6;">Các phiếu nghiệm thu đã nộp</h3>
+      <div class="dangky-history-list" id="nghiemthuPhieuList"></div>
+      <div class="accordion-panel" id="nghiemthuDetailPanel">
+        <div class="accordion-panel-inner">
+          <div id="nghiemthuPhieuDetail"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+</div>
+</div>
+
+
+
+
+<!-- ============ REPORT ============ -->
+<div id="screen-report" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="reportUserName"></div><div id="reportUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div class="page-title"><h2>Báo cáo</h2></div>
+
+
+
+
+  <div class="report-tabs" id="reportTabs">
+    <button type="button" class="report-tab-btn" data-report="1" onclick="selectReportTab('1')">1. Số lượng đề án/sáng kiến</button>
+    <button type="button" class="report-tab-btn" data-report="2" onclick="selectReportTab('2')">2. Công tác phê duyệt</button>
+    <button type="button" class="report-tab-btn" data-report="3" onclick="selectReportTab('3')">3. Kết quả phê duyệt</button>
+    <button type="button" class="report-tab-btn" data-report="4" onclick="selectReportTab('4')">4. Công tác nghiệm thu</button>
+    <button type="button" class="report-tab-btn" data-report="5" onclick="selectReportTab('5')">5. Kết quả nghiệm thu</button>
+    <button type="button" class="report-tab-btn" data-report="6" onclick="selectReportTab('6')">6. Báo cáo tổng kết cuối năm</button>
+  </div>
+
+
+
+
+  <div class="card" id="reportPanel">
+    <div class="empty">Vui lòng chọn loại báo cáo phía trên.</div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ PHAN CONG PHE DUYET ============ -->
+<div id="screen-phancong" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="phancongUserName"></div><div id="phancongUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div class="page-title">
+    <h2>Phân công phê duyệt</h2>
+    <p>Phân công người chấm và quản lý đợt phê duyệt cho từng đề án/sáng kiến.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;color:#1c47c6;">Đồng bộ dữ liệu</h3>
+    <p class="file-note" style="margin-top:0;">Dùng khi Mã đề án ở Sheet Dangky vừa được sửa/chỉnh lại (ví dụ đang chép dữ liệu cũ sang) - bấm để cập nhật lại Mã đề án cho khớp ở các Sheet liên quan (Phân công, Phê duyệt lần 1/2, Gửi lại sau phê duyệt).</p>
+    <button type="button" class="secondary-btn" id="phancongSyncBtn" onclick="syncPhanCongMadean()">Đồng bộ dữ liệu</button>
+    <div id="phancongSyncMessage" class="msg"></div>
+  </div>
+  <div class="card" id="phancongContent">
+    <div class="empty">Đang tải...</div>
+  </div>
+  <div id="phancongMessage" class="msg"></div>
+</div>
+</div>
+
+
+
+
+<!-- ============ GUI LAI SAU PHE DUYET ============ -->
+<div id="screen-noplan2" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="noplan2UserName"></div><div id="noplan2UserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div id="noplan2DeadlineBanner" class="deadline-banner"></div>
+  <div class="page-title">
+    <h2>Gửi lại sau phê duyệt</h2>
+    <p>Nộp lại đề án/sáng kiến sau khi có kết quả phê duyệt lần 1.</p>
+  </div>
+
+
+
+
+  <div class="card">
+    <h3 style="margin-top:0;color:#1c47c6;">Một số biểu mẫu cần tuân thủ</h3>
+    <div id="noplan2TemplateLinks"><div class="empty">Đang tải...</div></div>
+  </div>
+
+
+
+
+  <div class="card" id="noplan2AdminToggle" style="display:none;">
+    <h3 style="margin-top:0;color:#1c47c6;">Quản lý nhận phản hồi (chỉ Admin)</h3>
+    <div class="dangky-toggle-row">
+      <span class="lbl">Nhận phản hồi gửi lại sau phê duyệt lần 1</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="noplan2ToggleInput" onchange="toggleNopLan2Status(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+
+
+
+  <div class="form-box">
+    <div class="form-group">
+      <label for="np2KhoaPhong">1. Khoa/phòng <span class="required">*</span></label>
+      <select id="np2KhoaPhong" onchange="loadNopLan2DeAn()">
+        <option value="">-- Chọn khoa/phòng --</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="np2TenDeAn">2. Tên đề án/sáng kiến <span class="required">*</span></label>
+      <select id="np2TenDeAn" onchange="selectNopLan2DeAn()" disabled>
+        <option value="">-- Chọn đề án/sáng kiến --</option>
+      </select>
+    </div>
+    <div id="np2FormFields" style="display:none;">
+      <div class="form-group">
+        <label for="np2TenSua">3. Tên đề án/sáng kiến sau chỉnh sửa (nếu có)</label>
+        <input type="text" id="np2TenSua">
+      </div>
+      <div class="form-group">
+        <label for="np2FilePicker">4. Đính kèm file PDF <span class="required">*</span></label>
+        <input type="file" id="np2FilePicker" accept=".pdf,application/pdf" style="display:none" onchange="handleNopLan2FileSelect(event)">
+        <button type="button" class="secondary-btn" onclick="document.getElementById('np2FilePicker').click()">+ Chọn file</button>
+        <div id="np2FileList" class="file-chip-list"></div>
+        <div id="np2ExistingFile"></div>
+        <div class="file-note">Chỉ nhận file PDF, tối đa 1 file.</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;display:none;" id="np2EditBtn" onclick="enterNopLan2EditMode()">Chỉnh sửa</button>
+        <button type="button" class="primary" style="width:auto;padding:10px 20px;" id="np2SubmitBtn" onclick="submitNopLan2Form()">Gửi</button>
+      </div>
+    </div>
+    <div id="noplan2Message" class="msg"></div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ GUI BAN HOAN CHINH (File_chot) ============ -->
+<div id="screen-filechot" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="filechotUserName"></div><div id="filechotUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div id="filechotDeadlineBanner" class="deadline-banner"></div>
+  <div class="page-title">
+    <h2>Gửi bản hoàn chỉnh</h2>
+    <p>Nộp bản hoàn chỉnh (có chữ ký) của đề án/sáng kiến.</p>
+  </div>
+
+
+  <div class="card" id="filechotAdminToggle" style="display:none;">
+    <h3 style="margin-top:0;color:#1c47c6;">Quản lý nhận bản hoàn chỉnh (chỉ Admin)</h3>
+    <div class="dangky-toggle-row">
+      <span class="lbl">Nhận bản hoàn chỉnh</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="filechotToggleInput" onchange="toggleFileChotStatus(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+
+  <div class="form-box">
+    <div class="form-group">
+      <label for="fcKhoaPhong">1. Khoa/phòng <span class="required">*</span></label>
+      <select id="fcKhoaPhong" onchange="loadFileChotDeAn()">
+        <option value="">-- Chọn khoa/phòng --</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="fcTenDeAn">2. Tên đề án/sáng kiến <span class="required">*</span></label>
+      <select id="fcTenDeAn" onchange="selectFileChotDeAn()" disabled>
+        <option value="">-- Chọn đề án/sáng kiến --</option>
+      </select>
+    </div>
+    <div id="fcFormFields" style="display:none;">
+      <div class="form-group">
+        <p style="color:var(--color-danger);font-weight:bold;margin:0 0 8px;">Lưu ý: Bản hoàn chỉnh cần có đầy đủ chữ ký.</p>
+        <label for="fcFilePicker">3. Đính kèm file PDF <span class="required">*</span></label>
+        <input type="file" id="fcFilePicker" accept=".pdf,application/pdf" style="display:none" onchange="handleFileChotFileSelect(event)">
+        <button type="button" class="secondary-btn" onclick="document.getElementById('fcFilePicker').click()">+ Chọn file</button>
+        <div id="fcFileList" class="file-chip-list"></div>
+        <div id="fcExistingFile"></div>
+        <div class="file-note">Chỉ nhận file PDF, tối đa 1 file.</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;display:none;" id="fcEditBtn" onclick="enterFileChotEditMode()">Chỉnh sửa</button>
+        <button type="button" class="primary" style="width:auto;padding:10px 20px;" id="fcSubmitBtn" onclick="submitFileChotForm()">Gửi</button>
+      </div>
+    </div>
+    <div id="filechotMessage" class="msg"></div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ BAO CAO NGHIEM THU (BC_nghiemthu) ============ -->
+<div id="screen-bcnghiemthu" class="screen">
+<div class="header">
+  <div class="header-title">HỆ THỐNG ĐỀ ÁN, SÁNG KIẾN CẢI TIẾN CHẤT LƯỢNG</div>
+  <div class="user-info">
+    <div><div id="bcnghiemthuUserName"></div><div id="bcnghiemthuUserEmail"></div></div>
+    <button class="logout-btn" onclick="doLogout()">Đăng xuất</button>
+  </div>
+</div>
+<div class="container">
+  <button class="back-btn" onclick="showScreen('menu')">← Quay lại</button>
+  <div id="bcnghiemthuDeadlineBanner" class="deadline-banner"></div>
+  <div class="page-title">
+    <h2>Báo cáo nghiệm thu</h2>
+    <p>Nộp báo cáo nghiệm thu (chỉ áp dụng cho đề án/sáng kiến đã được duyệt).</p>
+  </div>
+
+
+  <div class="card" id="bcnghiemthuAdminToggle" style="display:none;">
+    <h3 style="margin-top:0;color:#1c47c6;">Quản lý nhận báo cáo nghiệm thu (chỉ Admin)</h3>
+    <div class="dangky-toggle-row">
+      <span class="lbl">Nhận báo cáo nghiệm thu</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="bcnghiemthuToggleInput" onchange="toggleBCNghiemThuStatus(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+
+
+  <div class="form-box">
+    <div class="form-group">
+      <label for="bcKhoaPhong">1. Khoa/phòng <span class="required">*</span></label>
+      <select id="bcKhoaPhong" onchange="loadBCNghiemThuDeAn()">
+        <option value="">-- Chọn khoa/phòng --</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="bcTenDeAn">2. Tên đề án/sáng kiến <span class="required">*</span></label>
+      <select id="bcTenDeAn" onchange="selectBCNghiemThuDeAn()" disabled>
+        <option value="">-- Chọn đề án/sáng kiến --</option>
+      </select>
+    </div>
+    <div id="bcFormFields" style="display:none;">
+      <div class="form-group">
+        <p style="color:var(--color-danger);font-weight:bold;margin:0 0 8px;">Lưu ý: Báo cáo nghiệm thu cần có đầy đủ chữ ký.</p>
+        <label for="bcFilePicker">3. Đính kèm file PDF <span class="required">*</span></label>
+        <input type="file" id="bcFilePicker" accept=".pdf,application/pdf" style="display:none" onchange="handleBCNghiemThuFileSelect(event)">
+        <button type="button" class="secondary-btn" onclick="document.getElementById('bcFilePicker').click()">+ Chọn file</button>
+        <div id="bcFileList" class="file-chip-list"></div>
+        <div id="bcExistingFile"></div>
+        <div class="file-note">Chỉ nhận file PDF, tối đa 1 file.</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="secondary-btn" style="width:auto;padding:10px 20px;display:none;" id="bcEditBtn" onclick="enterBCNghiemThuEditMode()">Chỉnh sửa</button>
+        <button type="button" class="primary" style="width:auto;padding:10px 20px;" id="bcSubmitBtn" onclick="submitBCNghiemThuForm()">Gửi</button>
+      </div>
+    </div>
+    <div id="bcnghiemthuMessage" class="msg"></div>
+  </div>
+</div>
+</div>
+
+
+
+
+<!-- ============ MODAL DUNG CHUNG (SUA / XOA) ============ -->
+<div id="modalOverlay" class="modal-overlay">
+<div class="modal-box">
+<h3 id="modalTitle">Tiêu đề</h3>
+<div id="modalBody"></div>
+<div class="modal-actions">
+  <button class="modal-btn-secondary" onclick="closeModal()">Hủy</button>
+  <button class="modal-btn-primary" id="modalConfirmBtn">Xác nhận</button>
+</div>
+</div>
+</div>
+
+
+
+
+<!-- ============ MODAL XEM / SUA CHI SO DO LUONG ============ -->
+<div id="chisoModalOverlay" class="modal-overlay">
+<div class="modal-box chiso-modal-box">
+<div class="chiso-modal-header">
+  <h3>Chỉ số đo lường</h3>
+  <button type="button" class="modal-close-x" title="Đóng" onclick="closeChiSoModal()">✕</button>
+</div>
+<div class="chiso-modal-body-scroll" id="chisoModalBody"></div>
+<div class="modal-actions chiso-modal-footer" id="chisoModalFooter"></div>
+</div>
+</div>
+
+
+
+
+<!-- ============ CREDIT (hien tren tat ca giao dien) ============ -->
+<div class="app-footer">Created by mangoc ✦</div>
+
+
+
+
+<?!= include('JavaScript'); ?>
+</body>
+</html>
