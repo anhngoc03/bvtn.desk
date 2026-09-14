@@ -249,6 +249,29 @@ function getReportPheDuyetStats(token) {
 
 
 
+ // Cung 2 Sheet Phe_duyet_lan1/lan2 do, nhung tinh theo DON VI DE AN (khong nhan doi): "da" =
+ // de an DA DU 2 phieu o lan do, "chua" = phan con lai. Dung rieng cho khoi "So de an, sang
+ // kien" tren giao dien (khac khoi "So luot cham" o duoi, von tinh theo tung phieu rieng le).
+ function summarizeLanDeAn_(counts) {
+   let da = 0;
+   inScope.forEach(function (item) { if ((counts[keyFor_(item)] || 0) >= 2) da++; });
+   return { can: totalDeAn, da: da, chua: totalDeAn - da };
+ }
+
+
+
+
+ const sumLan1DeAn = summarizeLanDeAn_(countsLan1);
+ const sumLan2DeAn = summarizeLanDeAn_(countsLan2);
+ const sumTongDeAn = {
+   can: sumLan1DeAn.can + sumLan2DeAn.can,
+   da: sumLan1DeAn.da + sumLan2DeAn.da,
+   chua: sumLan1DeAn.chua + sumLan2DeAn.chua
+ };
+
+
+
+
  function pctOf_(n, total) { return total > 0 ? Math.round((n / total) * 1000) / 10 : 0; }
 
 
@@ -273,6 +296,24 @@ function getReportPheDuyetStats(token) {
    pieTong: [
      { label: "Đã phê duyệt", count: sumTong.da, percent: pctOf_(sumTong.da, sumTong.can) },
      { label: "Chưa phê duyệt", count: sumTong.chua, percent: pctOf_(sumTong.chua, sumTong.can) }
+   ],
+   // Khoi "So de an, sang kien" - CUNG 5 cot (STT/Chi so/Lan1/Lan2/Tong) nhung don vi la DE AN
+   chiSoRowsDeAn: [
+     { label: "Số đề án, sáng kiến cần phê duyệt", lan1: sumLan1DeAn.can, lan2: sumLan2DeAn.can, tong: sumTongDeAn.can },
+     { label: "Số đề án, sáng kiến đã phê duyệt", lan1: sumLan1DeAn.da, lan2: sumLan2DeAn.da, tong: sumTongDeAn.da },
+     { label: "Số đề án, sáng kiến chưa phê duyệt", lan1: sumLan1DeAn.chua, lan2: sumLan2DeAn.chua, tong: sumTongDeAn.chua }
+   ],
+   pieLan1DeAn: [
+     { label: "Đã phê duyệt", count: sumLan1DeAn.da, percent: pctOf_(sumLan1DeAn.da, sumLan1DeAn.can) },
+     { label: "Chưa phê duyệt", count: sumLan1DeAn.chua, percent: pctOf_(sumLan1DeAn.chua, sumLan1DeAn.can) }
+   ],
+   pieLan2DeAn: [
+     { label: "Đã phê duyệt", count: sumLan2DeAn.da, percent: pctOf_(sumLan2DeAn.da, sumLan2DeAn.can) },
+     { label: "Chưa phê duyệt", count: sumLan2DeAn.chua, percent: pctOf_(sumLan2DeAn.chua, sumLan2DeAn.can) }
+   ],
+   pieTongDeAn: [
+     { label: "Đã phê duyệt", count: sumTongDeAn.da, percent: pctOf_(sumTongDeAn.da, sumTongDeAn.can) },
+     { label: "Chưa phê duyệt", count: sumTongDeAn.chua, percent: pctOf_(sumTongDeAn.chua, sumTongDeAn.can) }
    ],
    details: details
  };
