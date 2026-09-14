@@ -473,7 +473,7 @@
     return m[4] + ":" + m[5] + " " + m[3] + "/" + m[2] + "/" + m[1];
   }
 
-    function saveDeadlineFromBanner(containerId) {
+  function saveDeadlineFromBanner(containerId) {
     const input = document.getElementById(containerId + "_input");
     const value = input ? input.value : "";
 
@@ -484,23 +484,9 @@
         DEADLINE_BANNER_IDS.forEach(function (id) {
           if (document.getElementById(id)) renderDeadlineBanner(id, value);
         });
-        showDeadlineSavedNote_(containerId);
       })
       .withFailureHandler(function (error) { handleServerError(error, "Không lưu được hạn chót"); })
       .setSystemDeadline(token(), value);
-  }
-
-  // Hien dong "✓ Đã lưu" mau xanh canh nut, tu bien mat sau 2.5 giay
-  function showDeadlineSavedNote_(containerId) {
-    const box = document.getElementById(containerId);
-    if (!box) return;
-    const note = document.createElement("span");
-    note.className = "deadline-saved-note";
-    note.innerText = "✓ Đã lưu";
-    box.appendChild(note);
-    setTimeout(function () {
-      if (note.parentNode) note.parentNode.removeChild(note);
-    }, 2500);
   }
 
 
@@ -1899,6 +1885,8 @@
   // ==========================================================
   function initReportScreen() {
     currentReportTab = null;
+    reportPheDuyetStatsCache = null;
+    report2ExpandedBlock = null;
     document.querySelectorAll(".report-tab-btn").forEach(function (b) { b.classList.remove("active"); });
 
 
@@ -2000,58 +1988,179 @@
 
 
 
+  // ==========================================================
+  // BAO CAO 2 - CONG TAC PHE DUYET: 2 khoi accordion doc lap (khong con tab con)
+  // - Mac dinh CA 2 khoi deu thu gon, chi hien ten. Bam vao 1 khoi -> mo NGAY DUOI chinh no,
+  //   khoi con lai (neu dang mo) tu dong thu gon. Bam ra ngoai ca 2 khoi -> thu gon het.
+  // - Du lieu chi tai 1 lan (getReportPheDuyetStats), luu cache client, khong goi lai server
+  //   moi lan mo/dong khoi.
+  // ==========================================================
+  let reportPheDuyetStatsCache = null;
+  let report2ExpandedBlock = null; // "dean" | "luot" | null
+
   function renderReportPheDuyetStats(stats) {
+    reportPheDuyetStatsCache = stats;
+    report2ExpandedBlock = null;
+
     if (!stats) {
       document.getElementById("reportPanel").innerHTML = '<div class="empty">Chưa có dữ liệu.</div>';
       return;
     }
 
-
-
-
     let html = '<p class="file-note" style="margin-top:0;">Chỉ tính đề án/sáng kiến đăng ký năm ' + stats.currentYear + ' (không tính đề án cũ đang tiếp tục thực hiện).</p>';
 
-
-
-
-    // 3 bieu do tron xep ngang tren may tinh, tu xuong dong tren dien thoai (flex-wrap)
-    html += '<div style="display:flex;flex-wrap:wrap;gap:22px;justify-content:center;margin-bottom:26px;">' +
-      buildSmallPieChartHtml_("Phê duyệt lần 1", stats.pieLan1) +
-      buildSmallPieChartHtml_("Phê duyệt lần 2", stats.pieLan2) +
-      buildSmallPieChartHtml_("Tổng hợp", stats.pieTong) +
+    html += '<div class="report2-block">' +
+      '<button type="button" class="report2-block-header" onclick="toggleReportPheDuyetBlock(\'dean\')">Số đề án, sáng kiến</button>' +
+      '<div class="accordion-panel" id="report2BlockDean">' +
+        '<div class="accordion-panel-inner"><div id="report2BlockDeanContent"></div></div>' +
+      '</div>' +
     '</div>';
 
-
-
-
-    // Bang chi so: STT / Chi so / Lan 1 / Lan 2 / Tong
-    html += '<div class="table-wrapper"><table class="report-table"><thead><tr>' +
-      '<th>STT</th><th>Chỉ số</th><th>Lần 1</th><th>Lần 2</th><th>Tổng</th></tr></thead><tbody>';
-    stats.chiSoRows.forEach(function (row, i) {
-      html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(row.label) + '</td><td>' + row.lan1 + '</td><td>' + row.lan2 + '</td><td>' + row.tong + '</td></tr>';
-    });
-    html += '</tbody></table></div>';
-
-
-
-
-    // Bang chi tiet tung de an/sang kien
-    html += '<h3 style="color:var(--color-primary);margin:24px 0 12px;">Chi tiết số lượt chấm của các đề án/sáng kiến</h3>';
-    if (!stats.details || stats.details.length === 0) {
-      html += '<div class="empty">Chưa có đề án/sáng kiến nào trong phạm vi báo cáo.</div>';
-    } else {
-      html += '<div class="table-wrapper"><table class="report-table"><thead><tr>' +
-        '<th>STT</th><th>Khoa/phòng</th><th>Tên đề án/sáng kiến</th><th>Số lượt phê duyệt lần 1</th><th>Số lượt phê duyệt lần 2</th><th>Tổng số lần phê duyệt</th></tr></thead><tbody>';
-      stats.details.forEach(function (row, i) {
-        html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(row.khoaphong) + '</td><td>' + escapeHtml(row.tendean) + '</td><td>' + row.luotLan1 + '</td><td>' + row.luotLan2 + '</td><td>' + row.tong + '</td></tr>';
-      });
-      html += '</tbody></table></div>';
-    }
-
-
-
+    html += '<div class="report2-block">' +
+      '<button type="button" class="report2-block-header" onclick="toggleReportPheDuyetBlock(\'luot\')">Số lượt chấm</button>' +
+      '<div class="accordion-panel" id="report2BlockLuot">' +
+        '<div class="accordion-panel-inner"><div id="report2BlockLuotContent"></div></div>' +
+      '</div>' +
+    '</div>';
 
     document.getElementById("reportPanel").innerHTML = html;
+  }
+
+  function toggleReportPheDuyetBlock(which) {
+    report2ExpandedBlock = (report2ExpandedBlock === which) ? null : which;
+    applyReportPheDuyetBlockState_();
+  }
+
+  function applyReportPheDuyetBlockState_() {
+    const deanPanel = document.getElementById("report2BlockDean");
+    const luotPanel = document.getElementById("report2BlockLuot");
+    if (!deanPanel || !luotPanel) return;
+
+    deanPanel.classList.toggle("open", report2ExpandedBlock === "dean");
+    luotPanel.classList.toggle("open", report2ExpandedBlock === "luot");
+
+    document.querySelectorAll(".report2-block-header").forEach(function (btn, i) {
+      btn.classList.toggle("active", report2ExpandedBlock === (i === 0 ? "dean" : "luot"));
+    });
+
+    const stats = reportPheDuyetStatsCache;
+    if (!stats) return;
+
+    // Chi ve noi dung ben trong 1 LAN DAU TIEN moi khoi duoc mo (tranh ve lai lang phi khi
+    // dong/mo qua lai nhieu lan - du lieu khong doi trong suot phien xem bao cao nay)
+    const deanContent = document.getElementById("report2BlockDeanContent");
+    if (report2ExpandedBlock === "dean" && deanContent && !deanContent.dataset.rendered) {
+      deanContent.innerHTML = renderReportPheDuyetSummaryHtml_("report2DeanTable", stats.chiSoRowsDeAn, stats.pieLan1DeAn, stats.pieLan2DeAn, stats.pieTongDeAn);
+      deanContent.dataset.rendered = "1";
+    }
+    const luotContent = document.getElementById("report2BlockLuotContent");
+    if (report2ExpandedBlock === "luot" && luotContent && !luotContent.dataset.rendered) {
+      luotContent.innerHTML = renderReportPheDuyetSummaryHtml_("report2LuotTable", stats.chiSoRows, stats.pieLan1, stats.pieLan2, stats.pieTong) +
+        renderReportPheDuyetDetailHtml_(stats.details);
+      luotContent.dataset.rendered = "1";
+    }
+  }
+
+  // Bam ra NGOAI ca 2 khoi (khong phai dang bam vao chinh 1 trong 2 khoi) -> thu gon het
+  document.addEventListener("click", function (e) {
+    if (report2ExpandedBlock === null) return;
+    if (e.target.closest && e.target.closest(".report2-block")) return;
+    report2ExpandedBlock = null;
+    applyReportPheDuyetBlockState_();
+  });
+
+  // Bang chi so (STT/Chi so/Phe duyet lan 1/Phe duyet lan 2/Tong) - dung chung cho ca 2 khoi,
+  // chi khac du lieu dau vao (don vi de an hoac don vi luot). Tieu de cot deu can giua.
+  function renderReportPheDuyetSummaryHtml_(tableId, chiSoRows, pieLan1, pieLan2, pieTong) {
+    let html = '<div style="display:flex;flex-wrap:wrap;gap:22px;justify-content:center;margin-bottom:26px;">' +
+      buildSmallPieChartHtml_("Phê duyệt lần 1", pieLan1) +
+      buildSmallPieChartHtml_("Phê duyệt lần 2", pieLan2) +
+      buildSmallPieChartHtml_("Tổng hợp", pieTong) +
+    '</div>';
+
+    html += '<div style="text-align:right;margin-bottom:8px;">' + renderTableCopyBtnHtml_(tableId) + '</div>';
+    html += '<div class="table-wrapper"><table class="report-table" id="' + tableId + '"><thead><tr>' +
+      '<th style="text-align:center;">STT</th><th style="text-align:center;">Chỉ số</th>' +
+      '<th style="text-align:center;">Phê duyệt lần 1</th><th style="text-align:center;">Phê duyệt lần 2</th><th style="text-align:center;">Tổng</th>' +
+      '</tr></thead><tbody>';
+    chiSoRows.forEach(function (row, i) {
+      html += '<tr><td style="text-align:center;">' + (i + 1) + '</td><td>' + escapeHtml(row.label) + '</td>' +
+        '<td style="text-align:center;">' + row.lan1 + '</td><td style="text-align:center;">' + row.lan2 + '</td><td style="text-align:center;">' + row.tong + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // Bang chi tiet tung de an/sang kien (rieng cho khoi "So luot cham") - STT khong xuong dong,
+  // Khoa/phong + Ten de an can deu 2 ben, 3 cot cuoi can giua, them dong "Tổng" o cuoi bang.
+  function renderReportPheDuyetDetailHtml_(details) {
+    let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px;">' +
+      '<h3 style="color:var(--color-primary);margin:0;">Chi tiết số lượt chấm của các đề án/sáng kiến</h3>' +
+      renderTableCopyBtnHtml_("report2DetailTable") +
+    '</div>';
+
+    if (!details || details.length === 0) {
+      html += '<div class="empty">Chưa có đề án/sáng kiến nào trong phạm vi báo cáo.</div>';
+      return html;
+    }
+
+    let totalLan1 = 0, totalLan2 = 0, totalTong = 0;
+
+    html += '<div class="table-wrapper"><table class="report-table" id="report2DetailTable"><thead><tr>' +
+      '<th style="text-align:center;white-space:nowrap;width:1%;">STT</th>' +
+      '<th style="text-align:center;">Khoa/phòng</th>' +
+      '<th style="text-align:center;">Tên đề án/sáng kiến</th>' +
+      '<th style="text-align:center;">Số lượt phê duyệt lần 1</th>' +
+      '<th style="text-align:center;">Số lượt phê duyệt lần 2</th>' +
+      '<th style="text-align:center;">Tổng số lần phê duyệt</th>' +
+      '</tr></thead><tbody>';
+    details.forEach(function (row, i) {
+      totalLan1 += row.luotLan1; totalLan2 += row.luotLan2; totalTong += row.tong;
+      html += '<tr>' +
+        '<td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
+        '<td style="text-align:justify;">' + escapeHtml(row.khoaphong) + '</td>' +
+        '<td style="text-align:justify;">' + escapeHtml(row.tendean) + '</td>' +
+        '<td style="text-align:center;">' + row.luotLan1 + '</td>' +
+        '<td style="text-align:center;">' + row.luotLan2 + '</td>' +
+        '<td style="text-align:center;">' + row.tong + '</td>' +
+      '</tr>';
+    });
+    html += '<tr style="background:var(--color-bg-tint2);font-weight:bold;">' +
+      '<td colspan="3" style="text-align:right;">Tổng</td>' +
+      '<td style="text-align:center;">' + totalLan1 + '</td>' +
+      '<td style="text-align:center;">' + totalLan2 + '</td>' +
+      '<td style="text-align:center;">' + totalTong + '</td>' +
+    '</tr>';
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // ==========================================================
+  // SAO CHEP 1 BANG (dung chung cho Bao cao 1 va ca 3 bang o Bao cao 2) - chon toan bo noi
+  // dung bang bang Range/Selection roi goi execCommand("copy"), dan duoc thang thanh 1 bang
+  // that su vao Word/Excel (khac voi copy van ban thuong, se mat cau truc dong/cot).
+  // ==========================================================
+  function renderTableCopyBtnHtml_(tableId) {
+    return '<button type="button" class="secondary-btn" style="width:auto;padding:6px 14px;font-size:13px;flex-shrink:0;" onclick="copyReportTableToClipboard_(\'' + tableId + '\', this)">📋 Sao chép bảng</button>';
+  }
+
+  function copyReportTableToClipboard_(tableId, btn) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+
+    const range = document.createRange();
+    range.selectNode(table);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    selection.removeAllRanges();
+
+    const original = btn.innerText;
+    btn.innerText = ok ? "✓ Đã sao chép" : "Không sao chép được";
+    setTimeout(function () { btn.innerText = original; }, 2000);
   }
 
 
@@ -2075,7 +2184,8 @@
 
 
     const tableHtml =
-      '<div class="table-wrapper"><table class="report-table"><thead><tr><th>Nhóm</th><th>Số lượng</th><th>Tỷ lệ %</th></tr></thead><tbody>' +
+      '<div style="text-align:right;margin-bottom:8px;">' + renderTableCopyBtnHtml_("report1Table") + '</div>' +
+      '<div class="table-wrapper"><table class="report-table" id="report1Table"><thead><tr><th>Nhóm</th><th>Số lượng</th><th>Tỷ lệ %</th></tr></thead><tbody>' +
       stats.items.map(function (item) {
         return '<tr><td>' + escapeHtml(item.label) + '</td><td>' + item.count + '</td><td>' + item.percent + '%</td></tr>';
       }).join('') +
@@ -2085,12 +2195,7 @@
 
 
 
-    const isAdminAcc = session && String(session.vaiTro).trim() === "Admin";
-    panel.innerHTML =
-      cardsHtml +
-      buildPieChartHtml(stats) +
-      tableHtml +
-      (isAdminAcc ? '<button type="button" class="secondary-btn export-btn" onclick="exportReportDeAnStats()">Xuất file</button>' : '');
+    panel.innerHTML = cardsHtml + buildPieChartHtml(stats) + tableHtml;
   }
 
 
@@ -4578,7 +4683,7 @@
     let html = "";
     pheduyetChuaFilteredList.forEach(function (item, i) {
       const active = pheduyetChuaExpandedIndex === i ? " active" : "";
-            const label = "Phiếu " + (i + 1) + " - " + item.khoaphong;
+      const label = item.tendean + " - " + item.khoaphong;
       html += '<button type="button" class="dangky-history-btn' + active + '" onclick="togglePheDuyetChuaItem(' + i + ')">' + escapeHtml(label) + '</button>';
     });
     listBox.innerHTML = html;
