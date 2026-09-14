@@ -1887,6 +1887,8 @@
     currentReportTab = null;
     reportPheDuyetStatsCache = null;
     report2ExpandedBlock = null;
+    report3Cache = null;
+    report3ExpandedBlock = null;
     document.querySelectorAll(".report-tab-btn").forEach(function (b) { b.classList.remove("active"); });
 
 
@@ -1942,6 +1944,21 @@
           panel.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
         })
         .getReportPheDuyetStats(token());
+      return;
+    }
+
+
+
+
+    if (key === "3") {
+      panel.innerHTML = '<div class="empty">Đang tải...</div>';
+      google.script.run
+        .withSuccessHandler(function (stats) { renderReportPheDuyetKetQua(stats); })
+        .withFailureHandler(function (error) {
+          if (isSessionExpiredError(error)) { panel.innerHTML = ""; showSessionExpiredModal(); return; }
+          panel.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+        })
+        .getReportPheDuyetKetQua(token());
       return;
     }
 
@@ -2061,12 +2078,17 @@
     }
   }
 
-  // Bam ra NGOAI ca 2 khoi (khong phai dang bam vao chinh 1 trong 2 khoi) -> thu gon het
+  // Bam ra NGOAI khoi accordion (khong phai dang bam vao chinh 1 khoi) -> thu gon het. Dung
+  // chung cho ca Bao cao 2 (report2ExpandedBlock) va Bao cao 3 (report3ExpandedBlock) vi ca 2
+  // deu tai su dung chung 1 class ".report2-block" - luc nao cung chi 1 trong 2 bao cao dang
+  // hien trong #reportPanel nen khong xung dot, goi ham "sai" con lai chi don gian khong lam gi.
   document.addEventListener("click", function (e) {
-    if (report2ExpandedBlock === null) return;
+    if (report2ExpandedBlock === null && report3ExpandedBlock === null) return;
     if (e.target.closest && e.target.closest(".report2-block")) return;
     report2ExpandedBlock = null;
+    report3ExpandedBlock = null;
     applyReportPheDuyetBlockState_();
+    applyReportKetQuaBlockState_();
   });
 
   // Bang chi so (STT/Chi so/Phe duyet lan 1/Phe duyet lan 2/Tong) - dung chung cho ca 2 khoi,
@@ -2136,8 +2158,187 @@
   }
 
   // ==========================================================
-  // SAO CHEP 1 BANG (dung chung cho Bao cao 1 va ca 3 bang o Bao cao 2) - chon toan bo noi
-  // dung bang bang Range/Selection roi goi execCommand("copy"), dan duoc thang thanh 1 bang
+  // BAO CAO 3 - KET QUA PHE DUYET: 3 khoi accordion doc lap (Lan 1 / Lan 2 / Tong ket), tai su
+  // dung DUNG CSS class ".report2-block" + co che dong/mo cua Bao cao 2 (khong can them CSS moi).
+  // ==========================================================
+  let report3Cache = null;
+  let report3ExpandedBlock = null; // "lan1" | "lan2" | "tongket" | null
+
+  function renderReportPheDuyetKetQua(stats) {
+    report3Cache = stats;
+    report3ExpandedBlock = null;
+
+    if (!stats) {
+      document.getElementById("reportPanel").innerHTML = '<div class="empty">Chưa có dữ liệu.</div>';
+      return;
+    }
+
+    let html = '<p class="file-note" style="margin-top:0;">Chỉ tính đề án/sáng kiến đăng ký năm ' + stats.currentYear + ' (không tính đề án cũ đang tiếp tục thực hiện).</p>';
+    html += buildReportKetQuaBlockShellHtml_("lan1", "Kết quả phê duyệt lần 1");
+    html += buildReportKetQuaBlockShellHtml_("lan2", "Kết quả phê duyệt lần 2");
+    html += buildReportKetQuaBlockShellHtml_("tongket", "Tổng kết");
+
+    document.getElementById("reportPanel").innerHTML = html;
+  }
+
+  function buildReportKetQuaBlockShellHtml_(key, title) {
+    return '<div class="report2-block">' +
+      '<button type="button" class="report2-block-header" data-key="' + key + '" onclick="toggleReportKetQuaBlock(\'' + key + '\')">' + escapeHtml(title) + '</button>' +
+      '<div class="accordion-panel" id="report3Block_' + key + '">' +
+        '<div class="accordion-panel-inner"><div id="report3BlockContent_' + key + '"></div></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function toggleReportKetQuaBlock(which) {
+    report3ExpandedBlock = (report3ExpandedBlock === which) ? null : which;
+    applyReportKetQuaBlockState_();
+  }
+
+  function applyReportKetQuaBlockState_() {
+    const anyPanel = document.getElementById("report3Block_lan1");
+    if (!anyPanel) return; // dang khong o Bao cao 3 - khong lam gi
+
+    ["lan1", "lan2", "tongket"].forEach(function (key) {
+      const panel = document.getElementById("report3Block_" + key);
+      if (panel) panel.classList.toggle("open", report3ExpandedBlock === key);
+    });
+    document.querySelectorAll('#reportPanel .report2-block-header[data-key]').forEach(function (btn) {
+      btn.classList.toggle("active", btn.dataset.key === report3ExpandedBlock);
+    });
+
+    const stats = report3Cache;
+    if (!stats || !report3ExpandedBlock) return;
+
+    const contentBox = document.getElementById("report3BlockContent_" + report3ExpandedBlock);
+    if (!contentBox || contentBox.dataset.rendered) return;
+
+    if (report3ExpandedBlock === "lan1") {
+      contentBox.innerHTML = renderKetQuaDetailHtml_("report3DetailLan1", stats.detailsLan1) +
+        renderTieuChiChartsHtml_(stats.tieuChiLan1);
+    } else if (report3ExpandedBlock === "lan2") {
+      contentBox.innerHTML = renderDiemLechSummaryHtml_(stats.diemLechGroups) +
+        renderKetQuaDetailHtml_("report3DetailLan2", stats.detailsLan2) +
+        renderTieuChiChartsHtml_(stats.tieuChiLan2);
+    } else if (report3ExpandedBlock === "tongket") {
+      contentBox.innerHTML = renderTongKetHtml_(stats.tongKet);
+    }
+    contentBox.dataset.rendered = "1";
+  }
+
+  // Danh sach chi tiet 8 cot (dung chung cho khoi Lan 1 va Lan 2) - STT khong xuong dong,
+  // Khoa/phong + Ten de an can deu 2 ben, cac cot con lai can giua.
+  function renderKetQuaDetailHtml_(tableId, details) {
+    let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">' +
+      '<h4 style="color:var(--color-primary);margin:0;">Danh sách chi tiết</h4>' +
+      renderTableCopyBtnHtml_(tableId) +
+    '</div>';
+
+    if (!details || details.length === 0) {
+      html += '<div class="empty">Chưa có đề án/sáng kiến nào trong phạm vi báo cáo.</div>';
+      return html;
+    }
+
+    html += '<div class="table-wrapper"><table class="report-table" id="' + tableId + '"><thead><tr>' +
+      '<th style="text-align:center;white-space:nowrap;width:1%;">STT</th>' +
+      '<th style="text-align:center;">Khoa/phòng</th>' +
+      '<th style="text-align:center;">Tên đề án, sáng kiến</th>' +
+      '<th style="text-align:center;">NC1</th>' +
+      '<th style="text-align:center;">NC2</th>' +
+      '<th style="text-align:center;">Điểm lệch</th>' +
+      '<th style="text-align:center;">Điểm TB</th>' +
+      '<th style="text-align:center;">ĐA/SK</th>' +
+      '</tr></thead><tbody>';
+    details.forEach(function (row, i) {
+      html += '<tr>' +
+        '<td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
+        '<td style="text-align:justify;">' + escapeHtml(row.khoaphong) + '</td>' +
+        '<td style="text-align:justify;">' + escapeHtml(row.tendean) + '</td>' +
+        '<td style="text-align:center;">' + escapeHtml(String(row.nc1)) + '</td>' +
+        '<td style="text-align:center;">' + escapeHtml(String(row.nc2)) + '</td>' +
+        '<td style="text-align:center;">' + escapeHtml(String(row.diemLech)) + '</td>' +
+        '<td style="text-align:center;">' + escapeHtml(String(row.diemTB)) + '</td>' +
+        '<td style="text-align:center;">' + escapeHtml(row.loai) + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // Bang phan bo Diem lech (rieng khoi Lan 2) - tai su dung buildPieChartHtml() co san (chi
+  // can dung dung hinh dang {items:[{label,count,percent}]})
+  function renderDiemLechSummaryHtml_(groups) {
+    let html = '<h4 style="color:var(--color-primary);margin:0 0 12px;">Phân bố điểm lệch (đề án/sáng kiến đã đủ 2 phiếu)</h4>';
+    html += buildPieChartHtml({ items: groups });
+    html += '<div style="text-align:right;margin-bottom:8px;">' + renderTableCopyBtnHtml_("report3DiemLechTable") + '</div>';
+    html += '<div class="table-wrapper"><table class="report-table" id="report3DiemLechTable"><thead><tr>' +
+      '<th>STT</th><th>Điểm lệch</th><th>Số lượng đề án, sáng kiến</th><th>Tỉ lệ %</th></tr></thead><tbody>';
+    groups.forEach(function (g, i) {
+      html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(g.label) + '</td><td>' + g.count + '</td><td>' + g.percent + '%</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // 2 bieu do cot rieng biet (Doi voi de an / Doi voi sang kien) the hien diem TB tung tieu chi
+  function renderTieuChiChartsHtml_(tieuChi) {
+    let html = '<h4 style="color:var(--color-primary);margin:24px 0 12px;">Điểm trung bình từng tiêu chí phê duyệt</h4>';
+    html += buildTieuChiBarChartHtml_("Đối với đề án", tieuChi.da);
+    html += buildTieuChiBarChartHtml_("Đối với sáng kiến", tieuChi.sk);
+    return html;
+  }
+
+  // Bieu do cot dang thanh ngang (moi tieu chi 1 dong: nhan ben tren, thanh diem ben duoi) -
+  // phu hop hon bieu do cot doc vi noi dung tieu chi la ca 1 cau dai, khong the nhan gon.
+  function buildTieuChiBarChartHtml_(title, items) {
+    const rows = items.map(function (item, i) {
+      const pct = Math.max(0, Math.min(100, (item.avg / PHEDUYET_MAX_DIEM_CLIENT) * 100));
+      return '<div class="tieuchi-bar-row">' +
+        '<div class="tieuchi-bar-label">' + (i + 1) + '. ' + escapeHtml(item.label) + '</div>' +
+        '<div class="tieuchi-bar-track"><div class="tieuchi-bar-fill" style="width:' + pct + '%;"></div>' +
+          '<span class="tieuchi-bar-value">' + item.avg + '/10</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="tieuchi-bar-chart"><h5 style="color:var(--color-text);margin:0 0 12px;">' + escapeHtml(title) + '</h5>' + rows + '</div>';
+  }
+
+  // Khoi "Tong ket" - bieu do tron + bang Duyet/Khong duyet + danh sach chi tiet rieng (4 cot)
+  function renderTongKetHtml_(tongKet) {
+    let html = buildPieChartHtml({ items: tongKet.items });
+    html += '<div style="text-align:right;margin-bottom:8px;">' + renderTableCopyBtnHtml_("report3TongKetTable") + '</div>';
+    html += '<div class="table-wrapper"><table class="report-table" id="report3TongKetTable"><thead><tr>' +
+      '<th>STT</th><th>Chỉ số</th><th>Số lượng</th><th>Tỉ lệ %</th></tr></thead><tbody>';
+    tongKet.items.forEach(function (item, i) {
+      html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(item.label) + '</td><td>' + item.count + '</td><td>' + item.percent + '%</td></tr>';
+    });
+    html += '</tbody></table></div>';
+
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 12px;flex-wrap:wrap;gap:10px;">' +
+      '<h4 style="color:var(--color-primary);margin:0;">Danh sách chi tiết</h4>' +
+      renderTableCopyBtnHtml_("report3TongKetDetailTable") +
+    '</div>';
+    if (!tongKet.details || tongKet.details.length === 0) {
+      html += '<div class="empty">Chưa có đề án/sáng kiến nào trong phạm vi báo cáo.</div>';
+      return html;
+    }
+    html += '<div class="table-wrapper"><table class="report-table" id="report3TongKetDetailTable"><thead><tr>' +
+      '<th style="text-align:center;white-space:nowrap;width:1%;">STT</th>' +
+      '<th style="text-align:center;">Khoa/phòng</th>' +
+      '<th style="text-align:center;">Tên đề án, sáng kiến</th>' +
+      '<th style="text-align:center;">Kết quả</th>' +
+      '</tr></thead><tbody>';
+    tongKet.details.forEach(function (row, i) {
+      html += '<tr>' +
+        '<td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
+        '<td style="text-align:justify;">' + escapeHtml(row.khoaphong) + '</td>' +
+        '<td style="text-align:justify;">' + escapeHtml(row.tendean) + '</td>' +
+        '<td style="text-align:center;">' + escapeHtml(row.ketqua) + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
   // that su vao Word/Excel (khac voi copy van ban thuong, se mat cau truc dong/cot).
   // ==========================================================
   function renderTableCopyBtnHtml_(tableId) {
