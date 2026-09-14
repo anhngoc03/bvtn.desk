@@ -2106,8 +2106,8 @@
       '<th style="text-align:center;">Phê duyệt lần 1</th><th style="text-align:center;">Phê duyệt lần 2</th><th style="text-align:center;">Tổng</th>' +
       '</tr></thead><tbody>';
     chiSoRows.forEach(function (row, i) {
-      html += '<tr><td style="text-align:center;">' + (i + 1) + '</td><td>' + escapeHtml(row.label) + '</td>' +
-        '<td style="text-align:center;">' + row.lan1 + '</td><td style="text-align:center;">' + row.lan2 + '</td><td style="text-align:center;">' + row.tong + '</td></tr>';
+      html += '<tr><td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td><td style="text-align:justify;">' + escapeHtml(row.label) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + row.lan1 + '</td><td style="text-align:center;white-space:nowrap;">' + row.lan2 + '</td><td style="text-align:center;white-space:nowrap;">' + row.tong + '</td></tr>';
     });
     html += '</tbody></table></div>';
     return html;
@@ -2142,16 +2142,16 @@
         '<td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
         '<td style="text-align:justify;">' + escapeHtml(row.khoaphong) + '</td>' +
         '<td style="text-align:justify;">' + escapeHtml(row.tendean) + '</td>' +
-        '<td style="text-align:center;">' + row.luotLan1 + '</td>' +
-        '<td style="text-align:center;">' + row.luotLan2 + '</td>' +
-        '<td style="text-align:center;">' + row.tong + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + row.luotLan1 + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + row.luotLan2 + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + row.tong + '</td>' +
       '</tr>';
     });
     html += '<tr style="background:var(--color-bg-tint2);font-weight:bold;">' +
       '<td colspan="3" style="text-align:right;">Tổng</td>' +
-      '<td style="text-align:center;">' + totalLan1 + '</td>' +
-      '<td style="text-align:center;">' + totalLan2 + '</td>' +
-      '<td style="text-align:center;">' + totalTong + '</td>' +
+      '<td style="text-align:center;white-space:nowrap;">' + totalLan1 + '</td>' +
+      '<td style="text-align:center;white-space:nowrap;">' + totalLan2 + '</td>' +
+      '<td style="text-align:center;white-space:nowrap;">' + totalTong + '</td>' +
     '</tr>';
     html += '</tbody></table></div>';
     return html;
@@ -2254,11 +2254,11 @@
         '<td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
         '<td style="text-align:justify;">' + escapeHtml(row.khoaphong) + '</td>' +
         '<td style="text-align:justify;">' + escapeHtml(row.tendean) + '</td>' +
-        '<td style="text-align:center;">' + escapeHtml(String(row.nc1)) + '</td>' +
-        '<td style="text-align:center;">' + escapeHtml(String(row.nc2)) + '</td>' +
-        '<td style="text-align:center;">' + escapeHtml(String(row.diemLech)) + '</td>' +
-        '<td style="text-align:center;">' + escapeHtml(String(row.diemTB)) + '</td>' +
-        '<td style="text-align:center;">' + escapeHtml(row.loai) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + escapeHtml(String(row.nc1)) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + escapeHtml(String(row.nc2)) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + escapeHtml(String(row.diemLech)) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + escapeHtml(String(row.diemTB)) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + escapeHtml(row.loai) + '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -2272,9 +2272,13 @@
     html += buildPieChartHtml({ items: groups });
     html += '<div style="text-align:right;margin-bottom:8px;">' + renderTableCopyBtnHtml_("report3DiemLechTable") + '</div>';
     html += '<div class="table-wrapper"><table class="report-table" id="report3DiemLechTable"><thead><tr>' +
-      '<th>STT</th><th>Điểm lệch</th><th>Số lượng đề án, sáng kiến</th><th>Tỉ lệ %</th></tr></thead><tbody>';
+      '<th style="text-align:center;">STT</th><th style="text-align:center;">Điểm lệch</th>' +
+      '<th style="text-align:center;">Số lượng đề án, sáng kiến</th><th style="text-align:center;">Tỉ lệ %</th></tr></thead><tbody>';
     groups.forEach(function (g, i) {
-      html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(g.label) + '</td><td>' + g.count + '</td><td>' + g.percent + '%</td></tr>';
+      html += '<tr><td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + escapeHtml(g.label) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + g.count + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + g.percent + '%</td></tr>';
     });
     html += '</tbody></table></div>';
     return html;
@@ -2308,9 +2312,13 @@
     let html = buildPieChartHtml({ items: tongKet.items });
     html += '<div style="text-align:right;margin-bottom:8px;">' + renderTableCopyBtnHtml_("report3TongKetTable") + '</div>';
     html += '<div class="table-wrapper"><table class="report-table" id="report3TongKetTable"><thead><tr>' +
-      '<th>STT</th><th>Chỉ số</th><th>Số lượng</th><th>Tỉ lệ %</th></tr></thead><tbody>';
+      '<th style="text-align:center;">STT</th><th style="text-align:center;">Chỉ số</th>' +
+      '<th style="text-align:center;">Số lượng</th><th style="text-align:center;">Tỉ lệ %</th></tr></thead><tbody>';
     tongKet.items.forEach(function (item, i) {
-      html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(item.label) + '</td><td>' + item.count + '</td><td>' + item.percent + '%</td></tr>';
+      html += '<tr><td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
+        '<td style="text-align:justify;">' + escapeHtml(item.label) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + item.count + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + item.percent + '%</td></tr>';
     });
     html += '</tbody></table></div>';
 
@@ -2333,7 +2341,7 @@
         '<td style="text-align:center;white-space:nowrap;">' + (i + 1) + '</td>' +
         '<td style="text-align:justify;">' + escapeHtml(row.khoaphong) + '</td>' +
         '<td style="text-align:justify;">' + escapeHtml(row.tendean) + '</td>' +
-        '<td style="text-align:center;">' + escapeHtml(row.ketqua) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + escapeHtml(row.ketqua) + '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -2386,11 +2394,14 @@
 
     const tableHtml =
       '<div style="text-align:right;margin-bottom:8px;">' + renderTableCopyBtnHtml_("report1Table") + '</div>' +
-      '<div class="table-wrapper"><table class="report-table" id="report1Table"><thead><tr><th>Nhóm</th><th>Số lượng</th><th>Tỷ lệ %</th></tr></thead><tbody>' +
+      '<div class="table-wrapper"><table class="report-table" id="report1Table"><thead><tr>' +
+      '<th style="text-align:center;">Nhóm</th><th style="text-align:center;">Số lượng</th><th style="text-align:center;">Tỷ lệ %</th></tr></thead><tbody>' +
       stats.items.map(function (item) {
-        return '<tr><td>' + escapeHtml(item.label) + '</td><td>' + item.count + '</td><td>' + item.percent + '%</td></tr>';
+        return '<tr><td style="text-align:justify;">' + escapeHtml(item.label) + '</td>' +
+          '<td style="text-align:center;white-space:nowrap;">' + item.count + '</td>' +
+          '<td style="text-align:center;white-space:nowrap;">' + item.percent + '%</td></tr>';
       }).join('') +
-      '<tr><th>Tổng cộng</th><th>' + stats.total + '</th><th>100%</th></tr>' +
+      '<tr><th style="text-align:center;">Tổng cộng</th><th style="text-align:center;white-space:nowrap;">' + stats.total + '</th><th style="text-align:center;white-space:nowrap;">100%</th></tr>' +
       '</tbody></table></div>';
 
 
