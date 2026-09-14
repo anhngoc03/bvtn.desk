@@ -473,7 +473,7 @@
     return m[4] + ":" + m[5] + " " + m[3] + "/" + m[2] + "/" + m[1];
   }
 
-  function saveDeadlineFromBanner(containerId) {
+    function saveDeadlineFromBanner(containerId) {
     const input = document.getElementById(containerId + "_input");
     const value = input ? input.value : "";
 
@@ -484,9 +484,23 @@
         DEADLINE_BANNER_IDS.forEach(function (id) {
           if (document.getElementById(id)) renderDeadlineBanner(id, value);
         });
+        showDeadlineSavedNote_(containerId);
       })
       .withFailureHandler(function (error) { handleServerError(error, "Không lưu được hạn chót"); })
       .setSystemDeadline(token(), value);
+  }
+
+  // Hien dong "✓ Đã lưu" mau xanh canh nut, tu bien mat sau 2.5 giay
+  function showDeadlineSavedNote_(containerId) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    const note = document.createElement("span");
+    note.className = "deadline-saved-note";
+    note.innerText = "✓ Đã lưu";
+    box.appendChild(note);
+    setTimeout(function () {
+      if (note.parentNode) note.parentNode.removeChild(note);
+    }, 2500);
   }
 
 
@@ -1931,7 +1945,113 @@
 
 
 
+    if (key === "2") {
+      panel.innerHTML = '<div class="empty">Đang tải...</div>';
+      google.script.run
+        .withSuccessHandler(function (stats) { renderReportPheDuyetStats(stats); })
+        .withFailureHandler(function (error) {
+          if (isSessionExpiredError(error)) { panel.innerHTML = ""; showSessionExpiredModal(); return; }
+          panel.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+        })
+        .getReportPheDuyetStats(token());
+      return;
+    }
+
+
+
+
     panel.innerHTML = '<div class="empty">Sẽ xây dựng sau.</div>';
+  }
+
+
+
+
+  // Ve 1 bieu do tron NHO (dung lai dung mau REPORT_CHART_COLORS) kem nhan tieu de rieng phia
+  // tren - dung cho 3 bieu do Lan 1/Lan 2/Tong hop xep canh nhau, khac voi buildPieChartHtml()
+  // (danh cho 1 bieu do lon duy nhat o Bao cao 1).
+  function buildSmallPieChartHtml_(title, items) {
+    let cumulative = 0;
+    const stops = items.map(function (item, i) {
+      const start = cumulative;
+      cumulative += item.percent;
+      const color = REPORT_CHART_COLORS[i % REPORT_CHART_COLORS.length];
+      return color + " " + start + "% " + cumulative + "%";
+    }).join(", ");
+
+
+
+
+    const legend = items.map(function (item, i) {
+      const color = REPORT_CHART_COLORS[i % REPORT_CHART_COLORS.length];
+      return '<div class="pie-legend-item"><span class="pie-dot" style="background:' + color + ';"></span>' +
+        escapeHtml(item.label) + ' — ' + item.count + ' (' + item.percent + '%)</div>';
+    }).join('');
+
+
+
+
+    return '<div class="report-chart-wrap" style="flex:1 1 260px;margin:0;">' +
+      '<h3 style="text-align:center;color:var(--color-primary);margin:0 0 12px;font-size:15px;">' + escapeHtml(title) + '</h3>' +
+      '<div class="pie-chart" style="width:150px;height:150px;background: conic-gradient(' + stops + ');"></div>' +
+      '<div class="pie-legend">' + legend + '</div>' +
+    '</div>';
+  }
+
+
+
+
+  function renderReportPheDuyetStats(stats) {
+    if (!stats) {
+      document.getElementById("reportPanel").innerHTML = '<div class="empty">Chưa có dữ liệu.</div>';
+      return;
+    }
+
+
+
+
+    let html = '<p class="file-note" style="margin-top:0;">Chỉ tính đề án/sáng kiến đăng ký năm ' + stats.currentYear + ' (không tính đề án cũ đang tiếp tục thực hiện).</p>';
+
+
+
+
+    // 3 bieu do tron xep ngang tren may tinh, tu xuong dong tren dien thoai (flex-wrap)
+    html += '<div style="display:flex;flex-wrap:wrap;gap:22px;justify-content:center;margin-bottom:26px;">' +
+      buildSmallPieChartHtml_("Phê duyệt lần 1", stats.pieLan1) +
+      buildSmallPieChartHtml_("Phê duyệt lần 2", stats.pieLan2) +
+      buildSmallPieChartHtml_("Tổng hợp", stats.pieTong) +
+    '</div>';
+
+
+
+
+    // Bang chi so: STT / Chi so / Lan 1 / Lan 2 / Tong
+    html += '<div class="table-wrapper"><table class="report-table"><thead><tr>' +
+      '<th>STT</th><th>Chỉ số</th><th>Lần 1</th><th>Lần 2</th><th>Tổng</th></tr></thead><tbody>';
+    stats.chiSoRows.forEach(function (row, i) {
+      html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(row.label) + '</td><td>' + row.lan1 + '</td><td>' + row.lan2 + '</td><td>' + row.tong + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+
+
+
+
+    // Bang chi tiet tung de an/sang kien
+    html += '<h3 style="color:var(--color-primary);margin:24px 0 12px;">Chi tiết số lượt chấm của các đề án/sáng kiến</h3>';
+    if (!stats.details || stats.details.length === 0) {
+      html += '<div class="empty">Chưa có đề án/sáng kiến nào trong phạm vi báo cáo.</div>';
+    } else {
+      html += '<div class="table-wrapper"><table class="report-table"><thead><tr>' +
+        '<th>STT</th><th>Khoa/phòng</th><th>Tên đề án/sáng kiến</th><th>Số lượt phê duyệt lần 1</th><th>Số lượt phê duyệt lần 2</th><th>Tổng số lần phê duyệt</th></tr></thead><tbody>';
+      stats.details.forEach(function (row, i) {
+        html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(row.khoaphong) + '</td><td>' + escapeHtml(row.tendean) + '</td><td>' + row.luotLan1 + '</td><td>' + row.luotLan2 + '</td><td>' + row.tong + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+
+
+
+
+    document.getElementById("reportPanel").innerHTML = html;
   }
 
 
@@ -4458,7 +4578,7 @@
     let html = "";
     pheduyetChuaFilteredList.forEach(function (item, i) {
       const active = pheduyetChuaExpandedIndex === i ? " active" : "";
-      const label = item.tendean + " - " + item.khoaphong;
+            const label = "Phiếu " + (i + 1) + " - " + item.khoaphong;
       html += '<button type="button" class="dangky-history-btn' + active + '" onclick="togglePheDuyetChuaItem(' + i + ')">' + escapeHtml(label) + '</button>';
     });
     listBox.innerHTML = html;
