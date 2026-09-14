@@ -1,0 +1,1109 @@
+<style>
+  /* ===== BANG MAU CHUNG (phoi tu 2 anh tham khao, tong xanh duong nghiem tuc) ===== */
+  :root {
+    --color-primary: #0B4F8C;
+    --color-primary-dark: #023E73;
+    --color-accent: #2A95BF;
+    --color-accent-light: #73C6D9;
+    --color-bg-page: #EDF3F9;
+    --color-bg-tint: #EAF3FA;
+    --color-bg-tint2: #DCEEF5;
+    --color-text: #22303F;
+    --color-text-muted: #64748B;
+    --color-border: #D9E4F0;
+    --color-success: #198754;
+    --color-danger: #dc3545;
+    --header-h: 66px; /* fallback, duoc JS cap nhat chinh xac theo tung man hinh (updateHeaderOffset) */
+
+
+    /* ===== BIEN MOI CHO APP SHELL (Giai doan 1 - Redesign) - dat ten theo dung yeu cau,
+       alias lai tu bang mau da co san o tren, KHONG doi mau. ===== */
+    --primary: var(--color-primary);
+    --primary-light: var(--color-bg-tint);
+    --bg: var(--color-bg-page);
+    --surface: #ffffff;
+    --border: var(--color-border);
+    --text: var(--color-text);
+    --text-muted: var(--color-text-muted);
+    --success: var(--color-success);
+    --warning: #C77700;
+    --danger: var(--color-danger);
+    --radius: 10px;
+    --sidebar-width: 240px;
+    --topbar-height: 60px;
+  }
+
+
+
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Be Vietnam Pro', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: var(--color-bg-page);
+    color: var(--color-text);
+    /* Sua loi chu dai bi chay tran ra ngoai man hinh (dac biet tren dien thoai) */
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== LOGIN ===== */
+  #screen-login {
+    min-height: 100vh;
+    justify-content: center;
+    align-items: center;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  #screen-login.active {
+    display: flex;
+  }
+  .login-box {
+    width: 420px;
+    max-width: 92vw;
+    background: white;
+    padding: 32px;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(11,79,140,0.16);
+  }
+  .login-title { text-align: center; margin-bottom: 26px; }
+  .login-title h2 { margin: 0 0 8px; color: var(--color-primary); line-height: 1.4; font-size: 19px; }
+  .login-title p { margin: 0; color: var(--color-text-muted); font-size: 14px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* Dong luu y phia duoi form dang nhap (he thong dang xay dung, phien 6 tieng...) */
+  .login-note {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border);
+  }
+  .login-note p {
+    margin: 0 0 10px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+    text-align: justify;
+    overflow-wrap: break-word;
+  }
+  .login-note p:last-child { margin-bottom: 0; }
+  .login-note b { color: var(--color-text); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== HEADER ===== */
+  .header {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    color: white;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    box-shadow: 0 2px 10px rgba(2,62,115,0.25);
+  }
+  .header-title { font-size: 18px; font-weight: bold; overflow-wrap: break-word; max-width: 100%; }
+  .user-info { text-align: right; font-size: 13px; line-height: 1.5; display: flex; align-items: center; gap: 12px; max-width: 100%; }
+  .user-info > div { overflow-wrap: break-word; word-break: break-word; min-width: 0; }
+  .logout-btn {
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.5);
+    color: white;
+    padding: 7px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .logout-btn:hover { background: rgba(255,255,255,0.3); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  .container { max-width: 1320px; margin: 30px auto; padding: 0 20px 40px; }
+  .back-btn {
+    margin-bottom: 18px; padding: 9px 16px; border: none; border-radius: 7px;
+    background: #64748B; color: white; cursor: pointer;
+    position: sticky;
+    top: calc(var(--header-h) + 12px);
+    z-index: 55;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  }
+  .back-btn:hover { background: #55626f; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  .page-title { margin-bottom: 20px; }
+  .page-title h2 { margin: 0 0 6px; color: var(--color-text); }
+  .page-title p { margin: 0; color: var(--color-text-muted); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  .card, .search-box, .form-box, .result-box, .history-box {
+    background: white; padding: 22px; border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(11,79,140,0.08); margin-bottom: 22px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  .form-group { margin-bottom: 18px; }
+  label { display: block; margin-bottom: 7px; font-weight: bold; font-size: 14px; }
+  .required { color: var(--color-danger); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  input, select, textarea {
+    width: 100%; max-width: 100%; padding: 11px; border: 1px solid #ccc; border-radius: 7px;
+    font-size: 15px; background: white; font-family: Arial, sans-serif; color: var(--color-text);
+  }
+  /* Cac trinh duyet KHONG cho tu xuong dong noi dung ben trong <select> gan lien voi he dieu hanh,
+     nen chi co the han che chieu rong va cat bot chu qua dai bang dau "..." de khong bi chay tran. */
+  select {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--color-primary); }
+  textarea { min-height: 110px; resize: vertical; }
+  input[readonly] { background: #f1f3f5; color: #555; }
+
+
+
+
+
+
+
+
+  /* ===== O NHAP MAT KHAU: nut hien/an (dung chung cho Dang nhap + popup Doi mat khau) ===== */
+  .password-field-wrap { position: relative; }
+  .password-field-wrap input { padding-right: 44px; }
+  .password-toggle-btn {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; font-size: 17px; padding: 6px 8px;
+    color: var(--color-text-muted); line-height: 1;
+  }
+  .password-toggle-btn:hover { color: var(--color-text); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  button.primary {
+    width: 100%; padding: 12px; border: none; border-radius: 8px;
+    background: var(--color-primary); color: white; font-size: 15px; font-weight: bold; cursor: pointer;
+  }
+  button.primary:hover { background: var(--color-primary-dark); }
+  button.primary:disabled { background: #9fb9d4; cursor: not-allowed; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  #loginMessage, .msg { margin-top: 13px; text-align: center; font-size: 14px; overflow-wrap: break-word; }
+  .error { color: var(--color-danger); }
+  .success { color: var(--color-success); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== MENU ===== */
+  .welcome { text-align: center; margin: 40px 20px 30px; }
+  .welcome p { color: var(--color-text-muted); }
+  .menu { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; padding: 20px; }
+  .menu-card {
+    background: white; border-radius: 14px; padding: 30px 22px; text-align: center; cursor: pointer;
+    box-shadow: 0 5px 20px rgba(11,79,140,0.08); transition: 0.15s;
+  }
+  .menu-card:hover { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(11,79,140,0.16); }
+  .menu-icon { font-size: 40px; margin-bottom: 12px; }
+  .menu-card h3 { color: var(--color-primary); margin-bottom: 8px; font-size: 16px; overflow-wrap: break-word; }
+  .menu-card p { color: var(--color-text-muted); font-size: 13px; line-height: 1.5; overflow-wrap: break-word; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== TABLE ===== */
+  .info-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .info-table th, .info-table td { border: 1px solid var(--color-border); padding: 9px 10px; text-align: left; vertical-align: top; overflow-wrap: break-word; word-break: break-word; }
+  .info-table td { text-align: justify; }
+  .info-table th { text-align: left; } /* ten cot van can le trai, khong bi justify */
+  .info-table th { width: 240px; background: var(--color-bg-tint); font-weight: bold; font-size: 14px; }
+  .status { font-weight: bold; color: var(--color-primary); }
+  .empty { text-align: center; color: var(--color-text-muted); padding: 26px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  .table-wrapper { overflow-x: auto; }
+  table.history { width: 100%; border-collapse: collapse; min-width: 950px; }
+  table.history th, table.history td { border: 1px solid var(--color-border); padding: 9px; text-align: left; vertical-align: top; font-size: 13px; overflow-wrap: break-word; word-break: break-word; }
+  table.history td { text-align: justify; }
+  table.history th { text-align: left; }
+  table.history th { background: var(--color-bg-tint); white-space: nowrap; }
+  .file-link { color: var(--color-primary); text-decoration: none; cursor: pointer; }
+  .file-link:hover { text-decoration: underline; }
+  .tag-edited { display: inline-block; margin-top: 4px; font-size: 11px; color: #b5650a; background: #fff3e0; padding: 2px 6px; border-radius: 4px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  .icon-btn { background: none; border: none; cursor: pointer; font-size: 15px; padding: 3px 6px; }
+  .icon-btn:hover { opacity: 0.7; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  .file-note { margin-top: 6px; font-size: 12px; color: var(--color-text-muted); }
+  .file-hint { margin-bottom: 8px; font-size: 12px; color: var(--color-text-muted); line-height: 1.5; font-style: italic; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== BANG CHI SO DO LUONG (man hinh Cap nhat tien do) ===== */
+  .chiso-box { background: var(--color-bg-tint); border: 1px solid var(--color-border); border-radius: 10px; padding: 14px; }
+  table.chiso-table { width: 100%; border-collapse: collapse; min-width: 480px; }
+  table.chiso-table th, table.chiso-table td { border: 1px solid var(--color-border); padding: 8px; font-size: 13px; text-align: left; vertical-align: top; }
+  table.chiso-table th { background: var(--color-bg-tint2); }
+  table.chiso-table td:first-child { width: 55%; }
+  table.chiso-table input { padding: 7px; font-size: 13px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== POP UP CHI SO (Xem chi tiet / Chinh sua) =====
+     Cau truc tach rieng: header (tieu de + nut X) va footer KHONG cuon, chi phan body (bang)
+     o giua moi cuon - truoc day ca hop popup cuon chung 1 khoi nen tieu de/X bi troi theo. */
+  .chiso-modal-box {
+    width: 640px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    overflow: hidden;
+  }
+  .chiso-modal-header {
+    position: relative;
+    flex-shrink: 0;
+    padding: 20px 54px 14px 24px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .chiso-modal-header h3 { margin: 0; color: var(--color-primary); }
+  .modal-close-x {
+    position: absolute; top: 14px; right: 14px;
+    width: 30px; height: 30px; border-radius: 8px; border: none;
+    background: #fdecea; color: var(--color-danger); font-size: 15px; font-weight: bold;
+    cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close-x:hover { background: #f6c9c5; }
+  .chiso-modal-body-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 16px 24px;
+  }
+  .chiso-modal-footer {
+    flex-shrink: 0;
+    margin-top: 0 !important;
+    padding: 14px 24px 20px;
+    border-top: 1px solid var(--color-border);
+  }
+  table.chiso-popup-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.chiso-popup-table th, table.chiso-popup-table td { border: 1px solid var(--color-border); padding: 10px 12px; font-size: 13.5px; text-align: left; overflow-wrap: break-word; }
+      table.chiso-popup-table th:first-child, table.chiso-popup-table td:first-child { width: 55%; }
+  table.chiso-popup-table th:last-child, table.chiso-popup-table td:last-child { width: 45%; }
+  table.chiso-popup-table thead th {
+    background: linear-gradient(var(--color-bg-tint), var(--color-bg-tint2)); color: var(--color-primary);
+    position: sticky; top: 0; z-index: 2;
+  }
+  table.chiso-popup-table tr:nth-child(even) td { background: #fafbfc; }
+  table.chiso-popup-table td input { padding: 7px; font-size: 13px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== BAO CAO ===== */
+  .report-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+  .report-tab-btn {
+    padding: 10px 16px; border: 1px solid var(--color-primary); border-radius: 8px;
+    background: white; color: var(--color-primary); cursor: pointer; font-size: 13.5px; font-weight: bold;
+  }
+  .report-tab-btn:hover { background: var(--color-bg-tint); }
+  .report-tab-btn.active { background: var(--color-primary); color: white; }
+
+
+
+
+
+
+
+
+  .report-summary { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 22px; }
+  .report-stat-card {
+    flex: 1 1 200px; background: var(--color-bg-tint); border: 1px solid var(--color-border); border-radius: 10px;
+    padding: 16px; text-align: center;
+  }
+  .report-stat-card .num { font-size: 26px; font-weight: bold; color: var(--color-primary); }
+  .report-stat-card .lbl { font-size: 12.5px; color: var(--color-text-muted); margin-top: 6px; line-height: 1.4; }
+
+
+
+
+
+
+
+
+  /* Bieu do tron ve bang CSS thuan (conic-gradient) - khong phu thuoc thu vien ngoai,
+     tranh truong hop script CDN bi chan lam trong khoang o giua man hinh nhu truoc day. */
+  .report-chart-wrap { max-width: 420px; margin: 0 auto 24px; text-align: center; }
+  .pie-chart {
+    width: 220px; height: 220px; border-radius: 50%; margin: 0 auto 18px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  }
+  .pie-legend { display: flex; flex-direction: column; gap: 7px; text-align: left; }
+  .pie-legend-item { font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .pie-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+
+
+
+
+
+
+
+
+  table.report-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  table.report-table th, table.report-table td { border: 1px solid var(--color-border); padding: 8px 10px; font-size: 13.5px; text-align: left; }
+  table.report-table th { background: var(--color-bg-tint); }
+  .export-btn { margin-top: 14px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ===== DANG KY: cong tac bat/tat (Admin) - dung chung cho NopLan2, PheDuyet ===== */
+  .dangky-toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border);
+  }
+  .dangky-toggle-row:last-child { border-bottom: none; }
+  .dangky-toggle-row .lbl { font-size: 14px; font-weight: bold; }
+  .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; inset: 0; background: #ccc; border-radius: 24px; transition: 0.2s;
+  }
+  .toggle-slider:before {
+    content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background: white; border-radius: 50%; transition: 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--color-primary); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+
+
+
+
+
+
+
+  /* ===== DANG KY: radio chon loai (muc 4) ===== */
+  .dangky-radio-option {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 8px; cursor: pointer;
+  }
+  .dangky-radio-option:hover { border-color: var(--color-primary); }
+  .dangky-radio-option input[type="radio"] { width: auto; flex-shrink: 0; }
+  .dangky-radio-option .opt-label { font-size: 14px; flex: 1; }
+  .dangky-radio-option.disabled { opacity: 0.55; cursor: not-allowed; background: var(--color-bg-tint); }
+  .dangky-radio-option.disabled:hover { border-color: var(--color-border); }
+  .dangky-radio-note { font-size: 12px; color: var(--color-danger); white-space: nowrap; flex-shrink: 0; }
+
+
+
+
+
+
+
+
+  .dangky-section-title { color: var(--color-primary); margin: 22px 0 14px; font-size: 16px; }
+
+
+
+
+
+
+
+
+  /* O vuong chon 1 (dung radio that de dam bao chi chon duoc 1, chi style lai cho vuong giong dau ☐ trong file goc) */
+  .dangky-square-radio {
+    appearance: none; -webkit-appearance: none; width: 17px; height: 17px;
+    border: 1.5px solid #999; border-radius: 4px; cursor: pointer; margin: 0;
+    position: relative; flex-shrink: 0; background: white;
+  }
+  .dangky-square-radio:checked { background: var(--color-primary); border-color: var(--color-primary); }
+  .dangky-square-radio:checked::after {
+    content: "✓"; position: absolute; inset: 0; color: white; font-size: 12px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+
+
+
+
+
+
+
+  /* ===== DANG KY: link bieu mau ===== */
+  .dangky-link-list { display: flex; flex-direction: column; gap: 8px; }
+  .dangky-link-list a { color: var(--color-primary); font-size: 14px; text-decoration: none; }
+  .dangky-link-list a:hover { text-decoration: underline; }
+
+
+
+
+
+
+
+
+  /* ===== DANG KY: lich su (dung chung cho lich su Dang ky va danh sach Phieu phe duyet) ===== */
+  .dangky-history-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .dangky-history-btn {
+    padding: 8px 14px; border: 1px solid var(--color-primary); color: var(--color-primary); background: white;
+    border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: bold;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  }
+  .dangky-history-btn:hover { transform: translateY(-1px); }
+  .dangky-history-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .dangky-detail-box { background: var(--color-bg-tint); border: 1px solid var(--color-border); border-radius: 10px; padding: 16px; }
+
+
+
+
+
+
+
+
+  /* ===== ACCORDION (dung chung cho Lich su dang ky + Danh sach phieu phe duyet) =====
+     Ky thuat "0fr -> 1fr" tren grid-template-rows: cho phep chieu cao mo/dong tu dong khop
+     dung noi dung ben trong ma van animate muot, khong can JS do chieu cao thu cong bang tay.
+     Khi mo (.open), .accordion-panel-inner (overflow:hidden) se lo dan ra theo transition. */
+  .accordion-panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.28s ease;
+  }
+  .accordion-panel.open { grid-template-rows: 1fr; }
+  .accordion-panel-inner { overflow: hidden; min-height: 0; }
+
+
+
+
+
+
+
+
+  /* Noi dung ben trong accordion (dung chung .dangky-detail-box) tu fade+truot nhe moi lan
+     duoc render moi (moi lan innerHTML thay doi la 1 phan tu DOM moi -> animation tu retrigger) */
+  @keyframes accFadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .dangky-detail-box { animation: accFadeIn 0.22s ease; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  @media (max-width: 900px) {
+    .menu { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 700px) {
+    .header { flex-direction: column; text-align: center; }
+    .user-info { justify-content: center; }
+    .menu { grid-template-columns: 1fr; }
+    .info-table { table-layout: auto; }
+    .info-table th { width: 40%; }
+  }
+/* ===== MODAL DUNG CHUNG (SUA / XOA) ===== */
+ .modal-overlay {
+   display: none;
+   position: fixed; inset: 0;
+   background: rgba(2,62,115,0.45);
+   align-items: center; justify-content: center;
+   z-index: 1000;
+   padding: 20px;
+ }
+ .modal-overlay.show { display: flex; }
+ .modal-box {
+   background: white; border-radius: 12px; padding: 24px;
+   width: 420px; max-width: 100%;
+   max-height: 85vh; overflow-y: auto;
+   box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+ }
+ .modal-box h3 { margin: 0 0 16px; color: var(--color-primary); overflow-wrap: break-word; }
+ .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+ .modal-actions button {
+   flex: 1; padding: 10px; border: none; border-radius: 7px;
+   cursor: pointer; font-size: 14px; font-weight: bold;
+ }
+ .modal-btn-secondary { background: #e9ecef; color: #333; }
+ .modal-btn-secondary:hover { background: #dee2e6; }
+ .modal-btn-primary { background: var(--color-primary); color: white; }
+ .modal-btn-primary:hover { background: var(--color-primary-dark); }
+ .modal-btn-primary.danger { background: var(--color-danger); }
+ .modal-btn-primary.danger:hover { background: #bb2d3b; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.secondary-btn {
+  padding: 9px 16px; border: 1px solid var(--color-primary); border-radius: 7px;
+  background: white; color: var(--color-primary); cursor: pointer; font-size: 14px; font-weight: bold;
+}
+.secondary-btn:hover { background: var(--color-bg-tint); }
+.secondary-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.file-chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.file-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--color-bg-tint); border-radius: 20px; padding: 6px 8px 6px 14px;
+  font-size: 13px; max-width: 100%;
+}
+.file-chip span.file-name, .file-chip a.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; color: var(--color-text); }
+.file-remove {
+  cursor: pointer; color: var(--color-danger); font-weight: bold;
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: #fff;
+}
+.file-remove:hover { background: #f8d7da; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== PHE DUYET: khung chia doi (File de an | Phieu phe duyet) =====
+   Desktop: 2 cot ngang nhau. Mobile (<=900px): xep chong doc, File de an o tren. */
+.pheduyet-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 22px;
+}
+.pheduyet-pane { margin-bottom: 0; }
+@media (max-width: 900px) {
+  .pheduyet-split { grid-template-columns: 1fr; }
+}
+
+
+
+
+/* Khung xem truoc file Google Drive ngay tren trang - CHI hien tren desktop (>900px).
+   Tren dien thoai chi hien link (CSS an khung nhung tren mobile). */
+.pheduyet-file-embed { display: none; }
+.pheduyet-file-embed iframe {
+  width: 100%; height: 560px; border: 1px solid var(--color-border); border-radius: 10px;
+}
+@media (min-width: 901px) {
+  .pheduyet-file-embed { display: block; margin-top: 14px; }
+}
+
+
+
+
+/* ===== PHAN CONG PHE DUYET: rieng bang nay can cot STT hep, Ten de an HEP + tu xuong dong,
+   cac cot Nguoi cham 1/2 va Trang thai RONG hon, uu tien Trang thai KHONG bao gio xuong dong.
+   (Cot dau tien la STT nen tat ca nth-child da duoc dich sang phai 1 so so voi truoc day.) ===== */
+table.phancong-table th:nth-child(1), table.phancong-table td.phancong-stt {
+  width: 44px;
+  text-align: center;
+}
+table.phancong-table th:nth-child(4), table.phancong-table td:nth-child(4) {
+  max-width: 220px;
+  text-align: justify;
+  word-break: break-word;
+}
+table.phancong-table th:nth-child(5), table.phancong-table td:nth-child(5),
+table.phancong-table th:nth-child(6), table.phancong-table td:nth-child(6) {
+  min-width: 190px;
+}
+table.phancong-table th:nth-child(7), table.phancong-table td:nth-child(7) {
+  min-width: 210px;
+  white-space: nowrap;
+}
+table.phancong-table select { width: 100%; }
+
+
+
+
+/* ===== PHE DUYET: bang cham diem (10 tieu chi + dong Tong diem) ===== */
+table.pheduyet-score-table { width: 100%; border-collapse: collapse; min-width: 460px; }
+table.pheduyet-score-table th, table.pheduyet-score-table td {
+  border: 1px solid var(--color-border); padding: 9px; font-size: 13.5px; text-align: left; vertical-align: top;
+}
+table.pheduyet-score-table th { background: var(--color-bg-tint); }
+table.pheduyet-score-table td.pheduyet-stt { width: 34px; text-align: center; }
+table.pheduyet-score-table td.pheduyet-diem-cell { width: 130px; }
+table.pheduyet-score-table td.pheduyet-diem-cell input { padding: 7px; font-size: 13px; text-align: center; }
+table.pheduyet-score-table .pheduyet-diem-hint { font-size: 11px; color: var(--color-text-muted); margin-top: 4px; }
+table.pheduyet-score-table tr.pheduyet-total-row td { background: var(--color-bg-tint2); font-weight: bold; }
+.pheduyet-total-value { color: var(--color-primary); font-size: 15px; }
+
+
+
+
+
+
+
+
+/* ===== CREDIT (watermark chim o goc man hinh, hien tren moi giao dien) ===== */
+.app-footer {
+  position: fixed;
+  right: 14px;
+  bottom: 10px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: rgba(34,48,63,0.45);
+  background: rgba(255,255,255,0.6);
+  padding: 3px 9px;
+  border-radius: 20px;
+  pointer-events: none;
+  user-select: none;
+  z-index: 500;
+}
+@media (max-width: 700px) {
+  .app-footer { right: 50%; transform: translateX(50%); bottom: 6px; }
+  table.pheduyet-score-table { min-width: 100%; font-size: 12.5px; }
+  table.pheduyet-score-table td.pheduyet-diem-cell { width: 92px; }
+}
+
+
+/* ===== YEU CAU CHINH SUA: o vuong do bao so + bang danh sach yeu cau ===== */
+.yc-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 5px; margin-left: 6px;
+  background: var(--color-danger); color: #fff; font-size: 12px; font-weight: bold;
+  border-radius: 10px; cursor: pointer; vertical-align: middle;
+}
+.yc-badge-zero { background: #bbb; }
+.yc-panel { margin-top: 8px; }
+.yc-list { display: flex; flex-direction: column; gap: 8px; }
+.yc-item { border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.yc-item-pending { background: #FFF8E1; border-color: #F0C36D; }
+.yc-item-accepted { background: #EAF7EE; border-color: #8FD19E; }
+.yc-item-rejected { background: #FBEAEA; border-color: #E29A9A; }
+.yc-item-header { color: var(--color-text-muted); margin-bottom: 4px; }
+.yc-item-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+
+
+.danger-btn {
+  background: #fff; color: var(--color-danger); border: 1.5px solid var(--color-danger);
+  border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: 0.15s;
+}
+.danger-btn:hover { background: var(--color-danger); color: #fff; }
+
+
+/* ==========================================================
+  APP SHELL (Topbar + Sidebar) - GIAI DOAN 2 REDESIGN: hien tren MOI man tru login.
+  ========================================================== */
+.app-shell { display: none; }
+
+
+.app-sidebar {
+ position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-width);
+ background: var(--surface); border-right: 1px solid var(--border);
+ z-index: 200; overflow-y: auto;
+ transition: transform 0.2s ease;
+}
+.app-sidebar-brand {
+ padding: 18px 20px; font-weight: 800; font-size: 15px; line-height: 1.35;
+ color: var(--primary); border-bottom: 1px solid var(--border); letter-spacing: 0.3px;
+}
+.app-sidebar-nav { padding: 10px 0 24px; }
+.sidebar-group-title {
+ padding: 16px 20px 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+ color: var(--text-muted); text-transform: uppercase;
+}
+.sidebar-item {
+ display: block; padding: 9px 20px 9px 28px; font-size: 14px; color: var(--text);
+ cursor: pointer; border-left: 3px solid transparent; transition: background 0.15s, border-color 0.15s;
+ text-decoration: none;
+}
+.sidebar-item:hover { background: var(--primary-light); }
+.sidebar-item.active { background: var(--primary-light); border-left-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+
+.app-topbar {
+ position: fixed; top: 0; left: var(--sidebar-width); right: 0; height: var(--topbar-height);
+ background: var(--primary); border-bottom: 1px solid var(--color-primary-dark);
+ display: flex; align-items: center; gap: 14px; padding: 0 22px;
+ z-index: 190;
+}
+.app-topbar-title { font-size: 16px; font-weight: 700; color: #fff; flex: 1; }
+.app-topbar-user { display: flex; align-items: center; gap: 14px; }
+.app-topbar-user-info { text-align: right; font-size: 12.5px; line-height: 1.4; color: rgba(255,255,255,0.75); }
+.app-topbar-user-info div:first-child { color: #fff; font-weight: 600; }
+.app-topbar .logout-btn {
+ background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); color: #fff;
+}
+.app-topbar .logout-btn:hover { background: rgba(255,255,255,0.28); }
+.sidebar-toggle-btn { color: #fff; }
+
+
+.sidebar-toggle-btn {
+ display: none; background: none; border: none; outline: none; box-shadow: none;
+ font-size: 26px; line-height: 1; cursor: pointer;
+ padding: 4px 8px;
+}
+.sidebar-toggle-btn:focus, .sidebar-toggle-btn:active, .sidebar-toggle-btn:hover {
+ background: none; border: none; outline: none; box-shadow: none;
+}
+.sidebar-overlay {
+ display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 195;
+}
+
+
+.shell-welcome-container { max-width: 640px; }
+.shell-welcome-panel {
+ background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+ padding: 28px 26px; margin-top: 30px;
+}
+.shell-welcome-panel h2 { margin: 0 0 8px; color: var(--primary); font-size: 20px; }
+.shell-welcome-panel p { margin: 0; color: var(--text-muted); font-size: 14px; }
+
+
+body.shell-mode { padding-top: var(--topbar-height); padding-left: var(--sidebar-width); }
+body.shell-mode .app-shell { display: block; }
+body.shell-mode .screen .header,
+body.shell-mode .screen > .container > .back-btn {
+ display: none;
+}
+body.shell-mode .screen.active { display: block; }
+
+
+@media (max-width: 900px) {
+ body.shell-mode { padding-left: 0; }
+ .app-topbar { left: 0; }
+ .sidebar-toggle-btn { display: inline-block; }
+ .app-sidebar { transform: translateX(-100%); }
+ .app-sidebar.open { transform: translateX(0); box-shadow: 4px 0 18px rgba(0,0,0,0.18); }
+ body.shell-mode.sidebar-drawer-open .sidebar-overlay { display: block; }
+ .app-topbar-user-info { display: none; }
+}
+
+
+.detail-edit-textarea {
+ width: 100%; height: 90px; resize: none; overflow-y: auto;
+ font-family: inherit; font-size: 14px; line-height: 1.5;
+ padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+}
+
+
+.dangky-history-item-wrap { display: inline-flex; align-items: stretch; }
+.dangky-history-item-wrap .dangky-history-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.dangky-history-delete-btn {
+ border: 1px solid var(--color-border); border-left: none; border-top-right-radius: 6px; border-bottom-right-radius: 6px;
+ background: #fff; color: var(--color-danger); padding: 0 10px; cursor: pointer; font-size: 13px;
+}
+.dangky-history-delete-btn:hover { background: var(--color-danger); color: #fff; }
+
+
+/* ===== HAN CHOT THUC HIEN: dong chu do dam o dau 7 man hinh (Dang ky, Gui lai sau phe duyet,
+   Gui ban hoan chinh, Cap nhat tien do, Phe duyet, Bao cao nghiem thu, Nghiem thu). Admin thay
+   them 1 o chon gio/ngay + nut Luu; cac vai tro khac chi xem dang chu thuong (khong co nut/o nhap). ===== */
+.deadline-banner {
+  font-weight: 800; color: var(--color-danger); margin-bottom: 16px; font-size: 14.5px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.deadline-banner input[type="datetime-local"] {
+  width: auto; flex: 0 0 auto; padding: 6px 8px; font-size: 13px; color: var(--color-text); font-weight: normal;
+}
+.deadline-banner button { flex: 0 0 auto; width: auto; padding: 6px 14px; font-size: 13px; }
+</style>
